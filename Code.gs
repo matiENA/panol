@@ -1,0 +1,443 @@
+/**
+ * PANOL CLOUD - MASTER SYSTEM v6.3
+ * Enhanced Analytics with Brand/Product data
+ */
+
+const CONFIG = {
+  SHEETS: {
+    ITEMS: 'DB_ITEMS', 
+    TRANSACTIONS: 'DB_TRANSACTIONS',
+    STAFF: 'DB_STAFF',
+    OT: 'DB_OT_LIST',
+    MESSAGING: 'DB_MESSAGING'
+  },
+  STAFF_COLS: { ID: 0, NAME: 1, ROLE: 2, SCORE: 3, AVG_TIME: 4, LAST_ACTIVE: 5, ZONE: 6 },
+  OT_COLS: { UNIT_ID: 0, OT_NUMBER: 1, SEMI: 2, OT_NUMBER_ALT: 3, PRODUCT: 4, BRAND: 5, BRAND_SEMI: 6 },
+  MSG_COLS: { MSG_ID: 0, TIMESTAMP: 1, SENDER: 2, TARGET_OP_ID: 3, UNIT_CONTEXT: 4, TYPE: 5, BODY: 6, STATUS: 7, REPLY: 8, SCORE: 9, TAG: 10 }
+};
+
+function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
+function _getSheet(name) { var ss = getSS(); var sheet = ss.getSheetByName(name); if (!sheet) sheet = ss.insertSheet(name); return sheet; }
+
+function doGet(e) {
+  var route = e && e.parameter && e.parameter.v ? e.parameter.v : 'home';
+  var title = 'App Mecánicos';
+  var file = 'Index'; 
+  if (route === 'dashboard') { file = 'Index-dashboard'; title = 'Command Center'; }
+  if (route === 'panol') { file = 'Index-panol'; title = 'Monitor Pañol'; }
+  if (route === 'inv') { file = 'Index-inv'; title = 'Control de Stock'; }
+  return HtmlService.createHtmlOutputFromFile(file).setTitle(title).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL).addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// === MESSAGING ===
+function sendDispatchCard(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+    const msgId = "MSG-" + Math.floor(Math.random() * 1000000);
+    if (!payload.targetOpId || !payload.body) return { success: false, error: "Missing required fields" };
+    sheet.appendRow([msgId, new Date(), "Dashboard", String(payload.targetOpId).trim(), payload.unitId || "GENERAL", payload.type || "REQUEST", payload.body, "UNREAD", "", 0, ""]);
+    return { success: true, msgId: msgId };
+  } catch (e) { return { success: false, error: e.message }; } 
+  finally { lock.releaseLock(); }
+}
+
+function pollInbox(opId) {
+  const sheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+  const data = sheet.getDataRange().getValues();
+  const messages = [];
+  const target = String(opId).trim();
+  const startRow = Math.max(1, data.length - 100);
+  for (let i = startRow; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[3]).trim() === target && String(row[7]).trim() === "UNREAD" && String(row[5]).trim() !== "RATING_LOG") {
+      messages.push({ id: row[0], sender: row[2], unit: row[4], type: row[5], body: row[6] });
+    }
+  }
+  return messages;
+}
+
+function resolveFeedback(msgId, responseText) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+    const data = sheet.getDataRange().getValues();
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][0]) === String(msgId)) {
+        sheet.getRange(i + 1, 8).setValue("RESOLVED");
+        sheet.getRange(i + 1, 9).setValue(responseText || "Sin respuesta");
+        return { success: true };
+      }
+    }
+    return { success: false, error: "Message not found" };
+  } catch (e) { return { success: false, error: e.message }; } 
+  finally { lock.releaseLock(); }
+}
+
+// === RATING ===
+function rateInteraction(refId, scoreDelta, tag) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const msgSheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+    const txSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+    let targetOpId = null;
+    
+    const msgData = msgSheet.getDataRange().getValues();
+    const shadowId = "LOG-" + refId;
+    
+    // Check if rating exists
+    for(let i = msgData.length - 1; i >= 1; i--) {
+      if(String(msgData[i][0]) === shadowId) {
+        msgSheet.getRange(i+1, 10).setValue(scoreDelta);
+        msgSheet.getRange(i+1, 11).setValue(tag);
+        targetOpId = msgData[i][3];
+        if(targetOpId) updateMechanicScore(targetOpId);
+        return { success: true };
+      }
+    }
+    
+    // Create new rating from transaction
+    const txData = txSheet.getDataRange().getValues();
+    for(let i = txData.length - 1; i >= 1; i--) {
+      if(String(txData[i][1]) === String(refId)) {
+        targetOpId = String(txData[i][2]).replace(/'/g, "").trim();
+        msgSheet.appendRow([shadowId, new Date(), "System", targetOpId, txData[i][5], "RATING_LOG", "Rating for " + refId, "RESOLVED", "Rated", scoreDelta, tag]);
+        updateMechanicScore(targetOpId);
+        return { success: true };
+      }
+    }
+    return { success: false, error: "Not found" };
+  } catch(e) { return { success: false, error: e.message }; } 
+  finally { lock.releaseLock(); }
+}
+
+function updateMechanicScore(opId) {
+  const msgSheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+  const staffSheet = _getSheet(CONFIG.SHEETS.STAFF);
+  const msgData = msgSheet.getDataRange().getValues();
+  const staffData = staffSheet.getDataRange().getValues();
+  let rawScore = 100;
+  let target = String(opId).trim();
+  for(let i=1; i<msgData.length; i++) {
+    if(String(msgData[i][3]).trim() === target) {
+      let q = Number(msgData[i][9]);
+      if(!isNaN(q) && q !== 0) rawScore += q;
+    }
+  }
+  rawScore = Math.min(100, Math.max(0, rawScore));
+  for(let i=1; i<staffData.length; i++) {
+    if(String(staffData[i][0]).trim() === target) {
+      staffSheet.getRange(i+1, 4).setValue(rawScore);
+      break;
+    }
+  }
+}
+
+// === ANALYTICS (ENHANCED) ===
+function getAnalyticsData() {
+  const txSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const staffSheet = _getSheet(CONFIG.SHEETS.STAFF);
+  const msgSheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+  const otSheet = _getSheet(CONFIG.SHEETS.OT);
+
+  // Build OT map (Unit -> Brand/Product)
+  const otData = otSheet.getDataRange().getValues();
+  const otMap = {};
+  for (let i = 1; i < otData.length; i++) {
+    const unitId = String(otData[i][0] || '').trim().toUpperCase();
+    if (unitId) otMap[unitId] = { product: otData[i][4] || '', brand: otData[i][5] || '', semi: otData[i][2] || '' };
+  }
+
+  // Build Staff map
+  const staffData = staffSheet.getDataRange().getValues();
+  const staffMap = {}, mechanicsList = [];
+  for (let i = 1; i < staffData.length; i++) {
+    const rId = String(staffData[i][0]).replace(/'/g, "").trim();
+    const rName = staffData[i][1], rScore = staffData[i][3] === "" ? 100 : Number(staffData[i][3]), rZone = staffData[i][6] || '';
+    if (rId && rName) {
+      staffMap[rId] = { name: rName, score: rScore, zone: rZone };
+      mechanicsList.push({ id: rId, name: rName, score: rScore, zone: String(rZone) });
+    }
+  }
+
+  // Build Rating map
+  const msgData = msgSheet.getDataRange().getValues();
+  const ratingMap = {};
+  for (let i = Math.max(1, msgData.length - 500); i < msgData.length; i++) {
+    if (String(msgData[i][5]) === "RATING_LOG") {
+      const reqId = String(msgData[i][0]).replace("LOG-", "");
+      const scoreDelta = Number(msgData[i][9]) || 0;
+      const tag = String(msgData[i][10]);
+      if (!ratingMap[reqId]) ratingMap[reqId] = { isRated: false, totalScore: 0, direction: null };
+      ratingMap[reqId].isRated = true;
+      ratingMap[reqId].totalScore += scoreDelta;
+      ratingMap[reqId].direction = tag === 'Positive' ? 'up' : 'down';
+    }
+  }
+
+  // Build Transactions
+  const txData = txSheet.getDataRange().getValues();
+  const transactions = [];
+  for (let i = Math.max(1, txData.length - 100); i < txData.length; i++) {
+    const row = txData[i], reqId = row[1];
+    if(reqId) {
+      const mId = String(row[2]).replace(/'/g, "").trim();
+      const mData = staffMap[mId] || {};
+      const unitInfo = String(row[5] || '');
+      const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
+      const otInfo = otMap[primaryUnit] || {};
+      const ratingInfo = ratingMap[reqId] || { isRated: false, totalScore: 0, direction: null };
+      
+      let reqTime = row[0], readyTime = row[9], deliveredTime = row[10];
+      if (reqTime instanceof Date) reqTime = reqTime.toISOString();
+      if (readyTime instanceof Date) readyTime = readyTime.toISOString();
+      if (deliveredTime instanceof Date) deliveredTime = deliveredTime.toISOString();
+
+      transactions.push({
+        timestamp: reqTime, reqId: reqId, opId: mId, mechName: mData.name || row[3], mechZone: mData.zone || '',
+        ot: row[4], unit: unitInfo, item: row[6], itemCount: row[7] || 1, status: row[8], notes: row[11],
+        shopMins: Number(row[12]) || 0, mechMins: Number(row[13]) || 0, readyTime: readyTime, deliveredTime: deliveredTime,
+        product: otInfo.product || '', brand: otInfo.brand || '', semi: otInfo.semi || '',
+        isRated: ratingInfo.isRated, currentRating: ratingInfo.totalScore, ratingDirection: ratingInfo.direction
+      });
+    }
+  }
+  return { transactions: transactions.reverse(), mechanics: mechanicsList.sort((a,b) => b.score - a.score) };
+}
+
+function getDashboardNotifications(opId) {
+  const sheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+  const data = sheet.getDataRange().getValues();
+  const staffSheet = _getSheet(CONFIG.SHEETS.STAFF);
+  const staffData = staffSheet.getDataRange().getValues();
+  let mechMap = {};
+  for(let j = 1; j < staffData.length; j++) mechMap[String(staffData[j][0]).trim()] = staffData[j][1];
+  
+  let notifications = [];
+  for(let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const sender = String(row[2] || '').trim(), status = String(row[7] || '').trim();
+    const msgType = String(row[5] || '').trim(), reply = String(row[8] || '').trim();
+    const targetId = String(row[3] || '').trim();
+    
+    if (sender === "Dashboard" && status === "RESOLVED" && reply && reply !== "0" && msgType !== "RATING_LOG" && (!opId || targetId === String(opId))) {
+      let timeAgo = "Reciente";
+      if (row[1] instanceof Date) {
+        const diffMins = Math.floor((new Date() - row[1]) / 60000);
+        if (diffMins < 60) timeAgo = diffMins + " min";
+        else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + " hrs";
+        else timeAgo = Math.floor(diffMins / 1440) + " días";
+      }
+      notifications.push({ id: row[0], timestamp: row[1] instanceof Date ? row[1].toISOString() : row[1], unit: row[4] || "General", mechId: targetId, mechName: mechMap[targetId] || "Desconocido", reply: reply, originalMsg: row[6] || "Consulta", timeAgo: timeAgo });
+    }
+  }
+  return notifications.reverse();
+}
+
+function dismissDashboardNotification(msgId) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = _getSheet(CONFIG.SHEETS.MESSAGING);
+    const data = sheet.getDataRange().getValues();
+    for(let i = data.length - 1; i >= 1; i--) {
+      if(String(data[i][0]) === String(msgId)) { sheet.getRange(i + 1, 8).setValue("DISMISSED"); return { success: true }; }
+    }
+    return { success: false, error: "Not found" };
+  } catch(e) { return { success: false, error: e.message }; } 
+  finally { lock.releaseLock(); }
+}
+
+// === WAREHOUSE ===
+function getPendingOrders() {
+  var transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  var transData = transSheet.getDataRange().getValues();
+  var ordersMap = {};
+  for (var i = Math.max(1, transData.length - 200); i < transData.length; i++) {
+    var row = transData[i], status = row[8], reqId = row[1];
+    if (status === "PENDIENTE" || status === "LISTO") {
+      if (!ordersMap[reqId]) ordersMap[reqId] = { reqId: reqId, timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], opInfo: row[3], otNumber: row[4], unitInfo: row[5], status: status, items: [], notes: row[11] };
+      ordersMap[reqId].items.push({ name: String(row[6]), qty: row[7] });
+    }
+  }
+  return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+// Enriched version with product/brand data for Index-panol
+function getPendingOrdersEnriched() {
+  const transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const otSheet = _getSheet(CONFIG.SHEETS.OT);
+  
+  // Build OT map (Unit -> Product/Brand)
+  const otData = otSheet.getDataRange().getValues();
+  const otMap = {};
+  for (let i = 1; i < otData.length; i++) {
+    const unitId = String(otData[i][CONFIG.OT_COLS.UNIT_ID] || '').trim().toUpperCase();
+    if (unitId) {
+      otMap[unitId] = { 
+        product: otData[i][CONFIG.OT_COLS.PRODUCT] || '', 
+        brand: otData[i][CONFIG.OT_COLS.BRAND] || '' 
+      };
+    }
+  }
+  
+  const transData = transSheet.getDataRange().getValues();
+  const ordersMap = {};
+  
+  for (let i = Math.max(1, transData.length - 200); i < transData.length; i++) {
+    const row = transData[i], status = row[8], reqId = row[1];
+    if (status === "PENDIENTE" || status === "LISTO") {
+      if (!ordersMap[reqId]) {
+        const unitInfo = String(row[5] || '');
+        const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
+        const otInfo = otMap[primaryUnit] || {};
+        
+        ordersMap[reqId] = { 
+          reqId: reqId, 
+          timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], 
+          opInfo: row[3], 
+          otNumber: row[4], 
+          unitInfo: unitInfo, 
+          status: status, 
+          items: [], 
+          notes: row[11],
+          product: otInfo.product || '',
+          brand: otInfo.brand || ''
+        };
+      }
+      ordersMap[reqId].items.push({ name: String(row[6]), qty: row[7] });
+    }
+  }
+  return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+function markAsReady(reqId) { return _updateTxStatus(reqId, "LISTO", 9, 10, 13); }
+function markAsDelivered(reqId) { return _updateTxStatus(reqId, "ENTREGADO", 9, 11, 14); }
+
+function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx) {
+  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  var data = sheet.getDataRange().getValues();
+  var now = new Date();
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (data[i][1] == reqId) {
+        var prevTime = data[i][statusColIdx === 9 ? 0 : 9];
+        if(prevTime && !(prevTime instanceof Date)) prevTime = new Date(prevTime);
+        var mins = prevTime ? Math.round((now.getTime() - prevTime.getTime()) / 60000) : 0;
+        sheet.getRange(i + 1, statusColIdx).setValue(status);   
+        sheet.getRange(i + 1, timeColIdx).setValue(now).setNumberFormat("dd/MM/yyyy HH:mm:ss");
+        sheet.getRange(i + 1, calcColIdx).setValue(mins);
+        return { success: true };
+      }
+    }
+  } catch(e) { return { success: false }; } 
+  finally { lock.releaseLock(); }
+  return { success: false };
+}
+
+// === MECHANIC APP ===
+function getMechanicConfig(opId) {
+  var sheet = _getSheet(CONFIG.SHEETS.STAFF);
+  var data = sheet.getDataRange().getValues();
+  var row = data.find(r => String(r[0]).trim() === String(opId).trim());
+  if (!row) return { success: false, error: "Usuario no encontrado" };
+  var boxes = row.slice(6, 11).map(String).filter(c => c);
+  return { success: true, name: row[1], role: row[2], boxes: boxes };
+}
+
+function getMechanicOrders(opId) {
+  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  var data = sheet.getDataRange().getValues();
+  var res = [], sId = String(opId).trim();
+  for(var i = Math.max(1, data.length - 300); i < data.length; i++) {
+    if(String(data[i][2]).replace("'","").trim() === sId && ["PENDIENTE","LISTO","ENTREGADO","DEVOLUCION"].includes(String(data[i][8]))) {
+      res.push({reqId:data[i][1], otNumber:data[i][4], item:data[i][6], qty:data[i][7], status:data[i][8]});
+    }
+  }
+  return res.reverse();
+}
+
+function submitBatchRequest(data) {
+  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  var ts = new Date();
+  var reqId = "REQ-" + Math.floor(Math.random() * 1000000);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    data.items.forEach(function(i) {
+      sheet.appendRow([ts, reqId, "'" + data.opId, data.mechanicName, "'" + data.otNumber, data.unitId, i.item, Number(i.qty), "PENDIENTE", "", "", i.notes || "", "", ""]);
+      updateStockByName(i.item, -Number(i.qty));
+    });
+    return { success: true };
+  } catch(e) { return { success: false, error: e.message }; } 
+  finally { lock.releaseLock(); }
+}
+
+// === INVENTORY ===
+function findUnitOrOt(query) {
+  const sheet = _getSheet(CONFIG.SHEETS.OT);
+  const data = sheet.getDataRange().getValues();
+  const q = String(query).trim().toUpperCase();
+  if (q.length < 2) return null;
+  for (let i = 1; i < data.length; i++) {
+    const unit = String(data[i][0]).toUpperCase().trim();
+    const ot = String(data[i][1]).trim();
+    const semi = String(data[i][2]).toUpperCase().trim();
+    if (unit === q || semi === q || unit.includes(q) || semi.includes(q)) return { success: true, unit: unit, ot: ot, semi: semi };
+  }
+  return { success: false };
+}
+
+function getItemCatalog() {
+  var sheet = _getSheet(CONFIG.SHEETS.ITEMS);
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var items = [];
+  for (var i = 1; i < data.length; i++) { var item = String(data[i][1]).trim(); if (item) items.push(item); }
+  return items.filter((item, pos) => items.indexOf(item) == pos).sort();
+}
+
+function updateStockByName(itemName, qtyChange) {
+  var sheet = _getSheet(CONFIG.SHEETS.ITEMS);
+  var data = sheet.getDataRange().getValues();
+  var search = String(itemName).trim().toLowerCase();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][1]).trim().toLowerCase() === search) { var current = Number(data[i][4]); sheet.getRange(i + 1, 5).setValue(current + Number(qtyChange)); return true; }
+  }
+  return false;
+}
+
+function getInventoryItems(query, categoryFilter) {
+  const sheet = _getSheet(CONFIG.SHEETS.ITEMS);
+  const data = sheet.getDataRange().getValues();
+  const results = [], searchStr = query ? String(query).toLowerCase().trim() : "";
+  for (let i = 1; i < data.length; i++) {
+    const name = String(data[i][1]);
+    if (searchStr === "" || name.toLowerCase().includes(searchStr)) results.push({ id: data[i][0], name: name, brand: data[i][2], stock: data[i][4], loc: data[i][5] });
+    if (results.length >= 50) break;
+  }
+  return results;
+}
+
+function updateItemStock(id, newQty) { return _updateItemCellSafe(id, 4, newQty); }
+function updateItemLoc(id, newLoc) { return _updateItemCellSafe(id, 5, newLoc); }
+
+function _updateItemCellSafe(id, colIndex, value) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = _getSheet(CONFIG.SHEETS.ITEMS);
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === String(id)) { sheet.getRange(i + 1, colIndex + 1).setValue(value); return { success: true }; } }
+    return { success: false };
+  } catch (e) { return { success: false }; } 
+  finally { lock.releaseLock(); }
+}
+
+const WAREHOUSE_USERS = { "1": "Ema", "6": "Matias" };
+function validateWarehouseUser(key) { return WAREHOUSE_USERS[key] || null; }
