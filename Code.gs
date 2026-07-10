@@ -393,13 +393,45 @@ function findUnitOrOt(query) {
   return { success: false };
 }
 
+// === REEMPLAZAR ESTA FUNCIÓN EN TU Code.gs ===
+
 function getItemCatalog() {
-  var sheet = _getSheet(CONFIG.SHEETS.ITEMS);
+  const sheet = _getSheet(CONFIG.SHEETS.ITEMS);
   if (!sheet) return [];
-  var data = sheet.getDataRange().getValues();
-  var items = [];
-  for (var i = 1; i < data.length; i++) { var item = String(data[i][1]).trim(); if (item) items.push(item); }
-  return items.filter((item, pos) => items.indexOf(item) == pos).sort();
+  
+  const data = sheet.getDataRange().getValues();
+  const itemsList = [];
+  const uniqueCheck = new Set();
+
+  // i = 1 salta el encabezado (Fila 0)
+  for (let i = 1; i < data.length; i++) { 
+    const name = String(data[i][1]).trim();       // Columna B (Índice 1): Nombre del repuesto
+    const category = String(data[i][3]).trim();   // Columna D (Índice 3): RUBRO
+
+    if (name) {
+      // Poka-Yoke: Si el Excel no tiene rubro definido, lo agrupamos de forma segura
+      const safeCategory = category ? category : "GENERAL";
+      
+      // Creamos una clave única para evitar enviar duplicados exactos al Frontend
+      const uniqueKey = safeCategory + "|" + name;
+
+      if (!uniqueCheck.has(uniqueKey)) {
+        uniqueCheck.add(uniqueKey);
+        itemsList.push({
+          category: safeCategory,
+          name: name
+        });
+      }
+    } 
+  }
+  
+  // Ordenar alfabéticamente: Primero por Categoría, luego por Nombre
+  return itemsList.sort((a, b) => {
+    if (a.category === b.category) {
+      return a.name.localeCompare(b.name);
+    }
+    return a.category.localeCompare(b.category);
+  });
 }
 
 function updateStockByName(itemName, qtyChange) {
@@ -412,13 +444,30 @@ function updateStockByName(itemName, qtyChange) {
   return false;
 }
 
+// === ACTUALIZAR EN TU Code.gs ===
+
 function getInventoryItems(query, categoryFilter) {
   const sheet = _getSheet(CONFIG.SHEETS.ITEMS);
   const data = sheet.getDataRange().getValues();
-  const results = [], searchStr = query ? String(query).toLowerCase().trim() : "";
+  const results = [];
+  const searchStr = query ? String(query).toLowerCase().trim() : "";
+  
   for (let i = 1; i < data.length; i++) {
-    const name = String(data[i][1]);
-    if (searchStr === "" || name.toLowerCase().includes(searchStr)) results.push({ id: data[i][0], name: name, brand: data[i][2], stock: data[i][4], loc: data[i][5] });
+    const name = String(data[i][1]); // Col B
+    const category = String(data[i][3]).trim() || "GENERAL"; // Col D (Nuevo)
+    
+    // Si hay búsqueda, verificamos coincidencia. Si no hay, traemos todo (hasta el límite)
+    if (searchStr === "" || name.toLowerCase().includes(searchStr)) {
+      results.push({ 
+        id: data[i][0], 
+        name: name, 
+        category: category, // Agregamos la categoría a la carga de datos
+        brand: data[i][2], 
+        stock: data[i][4], 
+        loc: data[i][5] 
+      });
+    }
+    // Límite de seguridad para no saturar la memoria del navegador móvil
     if (results.length >= 50) break;
   }
   return results;

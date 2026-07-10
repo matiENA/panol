@@ -271,35 +271,86 @@
     #returnReasonInput { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; margin-top: 10px; outline: none; transition: 0.2s; }
     #returnReasonInput:focus { border-color: var(--blue); }
 
-    /* Layout para los buscadores */
-.search-layout-wrapper {
+/* --- DEPENDENT SEARCH LAYOUT (UX/UI Prägnanz) --- */
+.search-dependency-layout {
   display: flex;
-  gap: 20px;
-  width: 100%;
-  max-width: 820px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  gap: 15px;
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  margin-bottom: 15px;
 }
 
-/* Apilar en pantallas pequeñas */
-@media (max-width: 600px) {
-  .search-layout-wrapper {
-    flex-direction: column;
-    gap: 12px;
-  }
+.search-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-/* Estilo de las etiquetas para claridad cognitiva */
 .search-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #4a4a4a;
-  margin-bottom: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* (El resto del CSS de .autocomplete-container, #function-input y .autocomplete-results se mantiene exactamente igual que antes para no romper lo actual) */
+.input-wrapper {
+  position: relative;
+}
+
+/* Feedback Visual de Bloqueo (Poka-Yoke) */
+#itemInput:disabled {
+  background-color: #e2e5e9;
+  color: #888;
+  cursor: not-allowed;
+  border-color: transparent;
+}
+
+.dropdown-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #888;
+  pointer-events: none;
+}
+
+/* Rediseño de resultados para el dropdown */
+.autocomplete-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.autocomplete-results li {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--dark);
+}
+
+.autocomplete-results li:hover {
+  background-color: #f3f4f6;
+  color: var(--blue);
+}
 
   </style>
 </head>
@@ -398,42 +449,45 @@
             
             <hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
 
-            <div class="input-group">
-              <label>Repuesto / Herramienta</label>
-              <div class="autocomplete-container">
-                 <input type="text" id="itemInput" placeholder="Escribe para buscar..." autocomplete="off" onkeyup="filterItems(this.value)" required>
-                 <div id="suggestions" class="suggestions-list"></div>
-              </div>
-            </div>
-
-            <!-- Contenedor Maestro de Búsqueda -->
-<div class="search-layout-wrapper">
-
-  <!-- Buscador Principal Actual (Intacto) -->
-  <div class="autocomplete-container" id="function-search-container">
-    <label for="function-input" class="search-label">Búsqueda General (Nombre, Código)</label>
-    <input 
-      type="text" 
-      id="function-input" 
-      placeholder="Buscar repuestos..." 
-      autocomplete="off"
-    />
-    <ul id="autocomplete-results" class="autocomplete-results hidden"></ul>
-  </div>
-
-  <!-- NUEVO: Buscador Diferenciado por Rubro (Columna D) -->
-  <div class="autocomplete-container" id="category-search-container">
-    <label for="category-input" class="search-label">Filtrar por Rubro (Categoría)</label>
-    <input 
-      type="text" 
-      id="category-input" 
-      placeholder="Ej: Suspensión, Electricidad..." 
-      autocomplete="off"
-    />
+<!-- ==========================================
+     NUEVO SELECTOR DEPENDIENTE (RUBRO -> REPUESTO)
+     ========================================== -->
+<div class="search-dependency-layout">
+  
+  <!-- PASO 1: Selector de Categoría (Permite teclear para filtrar) -->
+  <div class="search-group" id="category-search-container">
+    <label for="category-select" class="search-label">1. Filtrar por Rubro</label>
+    <div class="input-wrapper">
+      <input 
+        type="text" 
+        id="category-select" 
+        placeholder="Escribe o selecciona un rubro..." 
+        autocomplete="off"
+      />
+      <span class="dropdown-arrow">▼</span>
+    </div>
     <ul id="category-results" class="autocomplete-results hidden"></ul>
   </div>
 
+  <!-- PASO 2: Selector de Producto (Dependiente) -->
+  <div class="search-group" id="function-search-container">
+    <label for="itemInput" class="search-label">2. Buscar Repuesto / Herramienta</label>
+    <div class="input-wrapper">
+      <input 
+        type="text" 
+        id="itemInput" 
+        placeholder="🔒 Bloqueado: Elige un rubro primero" 
+        autocomplete="off"
+        disabled
+        required
+      />
+      <span class="dropdown-arrow">▼</span>
+    </div>
+    <ul id="product-results" class="autocomplete-results hidden"></ul>
+  </div>
+
 </div>
+<hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
 
             <div class="input-group" style="margin-bottom: 5px;">
               <details id="notesDetails">
@@ -1212,78 +1266,135 @@
          });
       }
 
-      // --- 1. LÓGICA DEL BUSCADOR ACTUAL (Se mantiene intacta) ---
-// (Aquí va tu código actual para #function-input)
-
-// --- 2. NUEVA LÓGICA: BÚSQUEDA POR RUBRO (Columna D) ---
-const categoryInput = document.getElementById('category-input');
+// ===========================================
+// SELECTORES DEPENDIENTES (COMBO-BOX ESTRICTO)
+// ===========================================
+const categorySelect = document.getElementById('category-select');
 const categoryResults = document.getElementById('category-results');
+const itemInput = document.getElementById('itemInput');
+const productResults = document.getElementById('product-results');
 
-// Simulamos los datos únicos extraídos de la Columna D ("RUBRO")
-// En Google Apps Script, traerías esta lista usando algo como: 
-// [...new Set(sheet.getRange("D2:D").getValues().flat().filter(String))]
-const rubrosDatabase = [
-  "Accesorios",
-  "Carrocería",
-  "Electricidad",
-  "Frenos",
-  "Lubricantes",
-  "Motor",
-  "Suspensión"
-];
+let currentFilteredProducts = [];
+let isCategoryValid = false;
+let isItemValid = false;
 
-categoryInput.addEventListener('input', function() {
-  const query = this.value.toLowerCase().trim();
+// Variables extraídas de dbItems (Asegúrate de que dbItems esté cargado)
+const getUniqueCategories = () => [...new Set(dbItems.map(item => item.category || "GENERAL"))].sort();
+
+// --- PASO 1: LÓGICA DE CATEGORÍAS ---
+
+// Mostrar opciones al hacer clic o enfocar
+categorySelect.addEventListener('focus', () => renderCategories(""));
+categorySelect.addEventListener('click', () => renderCategories(""));
+
+// Filtrar opciones al teclear (Delimitar)
+categorySelect.addEventListener('input', (e) => {
+  isCategoryValid = false; // Invalida hasta que seleccione de la lista
+  renderCategories(e.target.value.toLowerCase().trim());
+});
+
+function renderCategories(query) {
   categoryResults.innerHTML = '';
-  
-  if (!query) {
-    categoryResults.classList.add('hidden');
-    return;
-  }
-
-  // Filtrar rubros que coincidan con la búsqueda
-  const matches = rubrosDatabase.filter(rubro => 
-    rubro.toLowerCase().includes(query)
-  );
+  const categories = getUniqueCategories();
+  const matches = categories.filter(cat => cat.toLowerCase().includes(query));
 
   if (matches.length > 0) {
-    categoryResults.classList.remove('hidden');
-    
-    matches.forEach(match => {
+    matches.forEach(cat => {
       const li = document.createElement('li');
-      
-      // UX Feedback: Resaltar en negrita la parte que el usuario escribió (Ley de Similitud)
+      // Resaltar coincidencia (Ley de Similitud Gestalt)
       const regex = new RegExp(`(${query})`, "gi");
-      const highlightedName = match.replace(regex, "<span class='highlight'>$1</span>");
+      li.innerHTML = query ? cat.replace(regex, "<strong style='color: var(--blue);'>$1</strong>") : cat;
       
-      li.innerHTML = `<span style="font-size: 14px;">${highlightedName}</span>`;
-      
-      // Acción al seleccionar un Rubro
       li.addEventListener('click', () => {
-        categoryInput.value = match; // Autocompleta el input
+        categorySelect.value = cat;
+        isCategoryValid = true;
         categoryResults.classList.add('hidden');
         
-        // AQUÍ DISPARAS LA ACCIÓN:
-        // Por ejemplo, filtrar la tabla principal de repuestos para mostrar solo los de este rubro.
-        console.log("Rubro seleccionado para filtrar:", match);
-        // aplicarFiltroRubro(match); 
+        // Delimitar productos
+        currentFilteredProducts = dbItems.filter(item => (item.category || "GENERAL") === cat);
+        
+        // UX FEEDBACK: DESBLOQUEO GARANTIZADO DEL PASO 2
+        itemInput.removeAttribute('disabled');
+        itemInput.disabled = false;
+        itemInput.placeholder = `Escribe o elige repuesto de "${cat}"...`;
+        itemInput.value = ''; 
+        isItemValid = false;
+        itemInput.focus();
       });
-      
       categoryResults.appendChild(li);
     });
-  } else {
     categoryResults.classList.remove('hidden');
-    categoryResults.innerHTML = `<li style="color: #999; cursor: default;">No se encontraron rubros.</li>`;
-  }
-});
-
-// Cerrar el dropdown del rubro si el usuario hace clic afuera
-document.addEventListener('click', function(e) {
-  if (!document.getElementById('category-search-container').contains(e.target)) {
+  } else {
     categoryResults.classList.add('hidden');
   }
+}
+
+// --- PASO 2: LÓGICA DE REPUESTOS ---
+
+// Mostrar opciones al enfocar o hacer clic
+itemInput.addEventListener('focus', () => renderProducts(""));
+itemInput.addEventListener('click', () => renderProducts(""));
+
+// Filtrar opciones al teclear
+itemInput.addEventListener('input', (e) => {
+  isItemValid = false;
+  renderProducts(e.target.value.toLowerCase().trim());
 });
 
+function renderProducts(query) {
+  if (itemInput.disabled) return;
+  productResults.innerHTML = '';
+  
+  const matches = currentFilteredProducts.filter(item => {
+    const itemName = item.name || item; 
+    return itemName.toLowerCase().includes(query);
+  }).slice(0, 30); // Límite visual para no saturar UI
+
+  if (matches.length > 0) {
+    matches.forEach(match => {
+      const itemName = match.name || match;
+      const li = document.createElement('li');
+      const regex = new RegExp(`(${query})`, "gi");
+      
+      li.innerHTML = query ? itemName.replace(regex, "<strong style='color: var(--blue);'>$1</strong>") : itemName;
+      
+      li.addEventListener('click', () => {
+        itemInput.value = itemName;
+        isItemValid = true;
+        productResults.classList.add('hidden');
+      });
+      productResults.appendChild(li);
+    });
+    productResults.classList.remove('hidden');
+  } else {
+    productResults.innerHTML = `<li style="color: #999; cursor: default;">Sin coincidencias</li>`;
+    productResults.classList.remove('hidden');
+  }
+}
+
+// --- CONTROL DE ERRORES (Cerrar menús y Validar Selección) ---
+document.addEventListener('click', function(e) {
+  const isClickInsideCat = document.getElementById('category-search-container').contains(e.target);
+  const isClickInsideProd = document.getElementById('function-search-container').contains(e.target);
+
+  if (!isClickInsideCat) {
+    categoryResults.classList.add('hidden');
+    // Si sale del campo sin elegir una opción válida, se borra (Poka-Yoke)
+    if (!isCategoryValid) {
+      categorySelect.value = '';
+      itemInput.setAttribute('disabled', 'true');
+      itemInput.disabled = true;
+      itemInput.placeholder = "🔒 Bloqueado: Elige un rubro primero";
+      itemInput.value = '';
+      currentFilteredProducts = [];
+    }
+  }
+
+  if (!isClickInsideProd) {
+    productResults.classList.add('hidden');
+    if (!isItemValid && !itemInput.disabled) itemInput.value = '';
+  }
+});
     </script>
 </body>
 </html>
