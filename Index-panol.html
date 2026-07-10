@@ -618,15 +618,33 @@
       </div>
     </main>
 
-    <script>
+ <script>
       // === GLOBAL STATE ===
       let allOrders = [];
       let expandedCards = new Set();
+      let panolStaffList = []; // Lista de operarios de pañol
       let filters = {
         status: 'ALL',
         product: 'ALL',
         search: ''
       };
+
+      // === INIT ===
+      function initApp() {
+        // 1. Cargamos primero el staff de pañol.
+        google.script.run
+          .withSuccessHandler(staff => {
+            panolStaffList = staff;
+            loadData(); // Iniciamos la carga de pedidos
+            setInterval(loadData, 5000);
+            setInterval(updateClock, 1000);
+          })
+          .withFailureHandler(err => console.error("Error al cargar staff:", err))
+          .getPanolStaff();
+      }
+
+      // Arrancar el sistema
+      initApp();
 
       // === DATA FETCHING ===
       function loadData() { 
@@ -634,7 +652,6 @@
           .withSuccessHandler(onDataReceived)
           .withFailureHandler(err => {
             console.error('Load error:', err);
-            // Fallback to basic function if enriched version doesn't exist
             google.script.run
               .withSuccessHandler(onDataReceived)
               .withFailureHandler(e => console.error('Fallback error:', e))
@@ -653,11 +670,8 @@
       // === FILTERING & SORTING ===
       function setFilter(type, value, btn) {
         filters[type] = value;
-        
-        // Update UI
         document.querySelectorAll(`[data-filter="${type}"]`).forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        
         applyFilters();
       }
 
@@ -668,18 +682,12 @@
         
         filters.search = searchTerm;
 
-        // Filter
         let filtered = allOrders.filter(order => {
-          // Status filter
           if (filters.status !== 'ALL' && order.status !== filters.status) return false;
-          
-          // Product filter
           if (filters.product !== 'ALL') {
             const orderProduct = (order.product || '').toUpperCase();
             if (orderProduct !== filters.product) return false;
           }
-          
-          // Search filter
           if (searchTerm) {
             const matchUnit = (order.unitInfo || '').toLowerCase().includes(searchTerm);
             const matchOT = String(order.otNumber || '').includes(searchTerm);
@@ -690,28 +698,20 @@
             
             if (!matchUnit && !matchOT && !matchMech && !matchItem && !matchBrand && !matchProduct) return false;
           }
-          
           return true;
         });
 
-        // Sort
         filtered = sortOrders(filtered, sortBy);
-
-        // Render
         renderCards(filtered);
       }
 
       function sortOrders(orders, sortBy) {
         const now = Date.now();
-        
         return [...orders].sort((a, b) => {
           switch (sortBy) {
-            case 'time-asc':
-              return new Date(a.timestamp) - new Date(b.timestamp);
-            case 'time-desc':
-              return new Date(b.timestamp) - new Date(a.timestamp);
-            case 'mechanic':
-              return (a.opInfo || '').localeCompare(b.opInfo || '');
+            case 'time-asc': return new Date(a.timestamp) - new Date(b.timestamp);
+            case 'time-desc': return new Date(b.timestamp) - new Date(a.timestamp);
+            case 'mechanic': return (a.opInfo || '').localeCompare(b.opInfo || '');
             case 'urgent':
               const aWait = now - new Date(a.timestamp).getTime();
               const bWait = now - new Date(b.timestamp).getTime();
@@ -720,8 +720,7 @@
               if (aUrgent && !bUrgent) return -1;
               if (!aUrgent && bUrgent) return 1;
               return bWait - aWait;
-            default:
-              return 0;
+            default: return 0;
           }
         });
       }
@@ -729,7 +728,6 @@
       // === RENDERING ===
       function renderCards(orders) {
         const board = document.getElementById('board');
-        
         if (!orders || orders.length === 0) {
           const msg = filters.search || filters.status !== 'ALL' || filters.product !== 'ALL'
             ? { icon: '🔍', title: 'Sin resultados', text: 'Intenta con otros filtros' }
@@ -743,7 +741,6 @@
             </div>`;
           return;
         }
-
         board.innerHTML = orders.map(order => renderCard(order)).join('');
       }
 
@@ -772,14 +769,10 @@
         if (hasSemi) cardClass += ' has-semi';
 
         // Badges
-        const productBadge = o.product 
-          ? `<span class="badge badge-${o.product.toLowerCase()}">${o.product}</span>` 
-          : '';
-        const brandBadge = o.brand 
-          ? `<span class="badge badge-brand ${o.brand.toLowerCase()}">${o.brand}</span>` 
-          : '';
+        const productBadge = o.product ? `<span class="badge badge-${o.product.toLowerCase()}">${o.product}</span>` : '';
+        const brandBadge = o.brand ? `<span class="badge badge-brand ${o.brand.toLowerCase()}">${o.brand}</span>` : '';
 
-        // Mechanic initials
+        // Mechanic initials (Quién pide el repuesto)
         const initials = (o.opInfo || 'NN').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
         // Items
@@ -810,15 +803,21 @@
         }
         itemsHtml += '</div>';
 
-        // Notes
-        const noteHtml = o.notes && o.notes.trim()
-          ? `<div class="note-box">📝 ${o.notes}</div>`
-          : '';
+        const noteHtml = o.notes && o.notes.trim() ? `<div class="note-box">📝 ${o.notes}</div>` : '';
 
-        // Footer
+        // === FOOTER & POKA-YOKE ===
+        // Opciones del personal de Pañol dinámicas
+        const staffOptions = panolStaffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
         const footerHtml = isReady
           ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
-          : `<button class="btn-action btn-ready" onclick="markReady('${o.reqId}')">✓ MARCAR LISTO</button>`;
+          : `<div class="action-group">
+               <select id="panol-op-${o.reqId}" class="panol-select">
+                 <option value="" disabled selected>👤 Tu nombre...</option>
+                 ${staffOptions}
+               </select>
+               <button class="btn-action btn-ready" onclick="markReady('${o.reqId}')">✓ LISTO</button>
+             </div>`;
 
         return `
           <div class="${cardClass}" id="card-${o.reqId}">
@@ -861,172 +860,25 @@
 
       // === ACTIONS ===
       function toggleExpand(reqId) {
-        const hidden = document.getElementById(`hidden-${reqId}`);
         if (expandedCards.has(reqId)) {
           expandedCards.delete(reqId);
         } else {
           expandedCards.add(reqId);
         }
-        applyFilters(); // Re-render to update expand state
+        applyFilters(); 
       }
 
-      function markReady(reqId) {
-        const card = document.getElementById(`card-${reqId}`);
-        if (card) {
-          card.style.opacity = '0.5';
-          card.style.pointerEvents = 'none';
-        }
-        
-        google.script.run
-          .withSuccessHandler(() => loadData())
-          .withFailureHandler(err => {
-            console.error('Mark ready error:', err);
-            if (card) {
-              card.style.opacity = '1';
-              card.style.pointerEvents = 'auto';
-            }
-          })
-          .markAsReady(reqId);
-      }
-
-      // === UTILITIES ===
-      function updateStats() {
-        const pending = allOrders.filter(o => o.status === 'PENDIENTE').length;
-        const ready = allOrders.filter(o => o.status === 'LISTO').length;
-        document.getElementById('pendingCount').textContent = pending;
-        document.getElementById('readyCount').textContent = ready;
-      }
-
-      function updateClock() {
-        document.getElementById('clock').textContent = 
-          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }
-
-      // === INIT ===
-      loadData();
-      setInterval(loadData, 5000);
-      setInterval(updateClock, 1000);
-
-      // 1. Agregar a tus Variables Globales
-      let staffList = [];
-
-      // 2. Modificar el INIT (Cargar operarios antes de los pedidos)
-      function initApp() {
-        google.script.run
-          .withSuccessHandler(res => {
-            staffList = res; // Guardamos la lista de operarios
-            loadData();      // Ahora cargamos las cards
-            setInterval(loadData, 5000);
-            setInterval(updateClock, 1000);
-          })
-          .getStaffOptions();
-      }
-      
-      // Reemplaza tus llamadas de inicio al final del script por:
-      initApp();
-
-      // 3. Reemplazar la sección /* Mechanic Info */ dentro de tu function renderCard(o)
-      
-      // Generar las opciones del dropdown dinámicamente
-      const optionsHtml = staffList.map(staff => 
-        `<option value="${staff.id}" ${o.assignedOpId === String(staff.id) ? 'selected' : ''}>
-           ${staff.name}
-         </option>`
-      ).join('');
-
-      // Construir la nueva fila
-      const mechanicHtml = `
-        <div class="mechanic-row">
-          <div class="mechanic-avatar">${initials}</div>
-          <div class="operator-select-wrapper">
-             <select class="operator-select" onchange="assignOperator('${o.reqId}', this)">
-               <option value="" disabled ${!o.assignedOpId ? 'selected' : ''}>Asignar operario...</option>
-               ${optionsHtml}
-             </select>
-             <span class="save-feedback" id="feedback-${o.reqId}">✅</span>
-          </div>
-        </div>
-      `;
-
-      // Luego, en tu "return `...`" de renderCard, reemplaza esto:
-      // <div class="mechanic-row">...</div>
-      // Por tu nueva variable:
-      // ${mechanicHtml}
-
-
-      // 4. Agregar la función de Auto-Guardado (Feedback Inmediato)
-      function assignOperator(reqId, selectElement) {
-        const opId = selectElement.value;
-        const feedbackEl = document.getElementById(`feedback-${reqId}`);
-        
-        // Estado visual de "cargando"
-        selectElement.style.opacity = '0.5';
-        feedbackEl.textContent = '⏳';
-        feedbackEl.classList.add('show');
-
-        google.script.run
-          .withSuccessHandler(res => {
-            selectElement.style.opacity = '1';
-            if (res.success) {
-              feedbackEl.textContent = '✅';
-              // Ocultar el check después de 2 segundos (Prägnanz: no saturar la vista)
-              setTimeout(() => feedbackEl.classList.remove('show'), 2000);
-            } else {
-              feedbackEl.textContent = '❌';
-              alert("Error al asignar: " + res.error);
-            }
-          })
-          .withFailureHandler(err => {
-            selectElement.style.opacity = '1';
-            feedbackEl.textContent = '❌';
-            console.error(err);
-          })
-          .assignOperatorToOrder(reqId, opId);
-      }
-
-      // === GLOBAL STATE ===
-      let allOrders = [];
-      let expandedCards = new Set();
-      let panolStaffList = []; // <-- NUEVO: Lista de operarios de pañol
-      let filters = { status: 'ALL', product: 'ALL', search: '' };
-
-      // === INIT ===
-      // 1. Cargamos primero el staff. Cuando responda, iniciamos el loop de datos.
-      google.script.run
-        .withSuccessHandler(staff => {
-          panolStaffList = staff;
-          loadData(); 
-          setInterval(loadData, 5000);
-          setInterval(updateClock, 1000);
-        })
-        .getPanolStaff();
-
-      // === DENTRO DE TU FUNCIÓN renderCard(o) ===
-      
-      // 2. Generar las opciones del selector dinámicamente
-      const staffOptions = panolStaffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-
-      // 3. Reemplazar la constante footerHtml
-      const footerHtml = isReady
-        ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
-        : `<div class="action-group">
-             <select id="panol-op-${o.reqId}" class="panol-select">
-               <option value="" disabled selected>👤 Tu nombre...</option>
-               ${staffOptions}
-             </select>
-             <button class="btn-action btn-ready" onclick="markReady('${o.reqId}')">✓ LISTO</button>
-           </div>`;
-
-      // === ACTUALIZAR LA FUNCIÓN markReady ===
       function markReady(reqId) {
         const selectEl = document.getElementById(`panol-op-${reqId}`);
-        const panolOpId = selectEl.value;
+        const panolOpId = selectEl ? selectEl.value : null;
 
-        // POKA-YOKE: Si no eligió su nombre, agitamos el selector y abortamos
+        // POKA-YOKE: Validación de Seguridad (El sistema "habla")
         if (!panolOpId) {
-          selectEl.classList.remove('shake-error');
-          void selectEl.offsetWidth; // Forzar reflow para reiniciar animación
-          selectEl.classList.add('shake-error');
+          if (selectEl) {
+            selectEl.classList.remove('shake-error');
+            void selectEl.offsetWidth; // Reflow
+            selectEl.classList.add('shake-error');
+          }
           return;
         }
 
@@ -1045,7 +897,20 @@
               card.style.pointerEvents = 'auto';
             }
           })
-          .markAsReady(reqId, panolOpId); // <-- PASAMOS EL ID AL BACKEND
+          .markAsReady(reqId, panolOpId); // <- ENVIAMOS EL ID AL BACKEND
+      }
+
+      // === UTILITIES ===
+      function updateStats() {
+        const pending = allOrders.filter(o => o.status === 'PENDIENTE').length;
+        const ready = allOrders.filter(o => o.status === 'LISTO').length;
+        document.getElementById('pendingCount').textContent = pending;
+        document.getElementById('readyCount').textContent = ready;
+      }
+
+      function updateClock() {
+        document.getElementById('clock').textContent = 
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       }
     </script>
 </body>

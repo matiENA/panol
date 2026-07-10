@@ -317,27 +317,56 @@ function getPendingOrdersEnriched() {
 function markAsReady(reqId) { return _updateTxStatus(reqId, "LISTO", 9, 10, 13); }
 function markAsDelivered(reqId) { return _updateTxStatus(reqId, "ENTREGADO", 9, 11, 14); }
 
-function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx) {
-  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
-  var data = sheet.getDataRange().getValues();
-  var now = new Date();
+// === ACTUALIZAR EN Code.gs ===
+
+
+
+function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx, panolOpId) {
+  const sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const data = sheet.getDataRange().getValues();
+  const now = new Date();
   const lock = LockService.getScriptLock();
+  
+  let updatedCount = 0;
+
   try {
-    lock.waitLock(3000);
-    for (var i = data.length - 1; i >= 1; i--) {
-      if (data[i][1] == reqId) {
-        var prevTime = data[i][statusColIdx === 9 ? 0 : 9];
-        if(prevTime && !(prevTime instanceof Date)) prevTime = new Date(prevTime);
-        var mins = prevTime ? Math.round((now.getTime() - prevTime.getTime()) / 60000) : 0;
-        sheet.getRange(i + 1, statusColIdx).setValue(status);   
-        sheet.getRange(i + 1, timeColIdx).setValue(now).setNumberFormat("dd/MM/yyyy HH:mm:ss");
-        sheet.getRange(i + 1, calcColIdx).setValue(mins);
-        return { success: true };
+    lock.waitLock(5000);
+    const targetReq = String(reqId).trim();
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]).trim() === targetReq) {
+        const rowNum = i + 1; // Fila exacta en el Excel
+        
+        // 1. Columna I (9) - ESTADO (PENDIENTE -> LISTO)
+        sheet.getRange(rowNum, statusColIdx).setValue(status);
+        
+        // 2. Columna J o K (10 u 11) - TIMESTAMP
+        sheet.getRange(rowNum, timeColIdx).setValue(now).setNumberFormat("dd/MM/yyyy HH:mm:ss");
+        
+        // 3. Columna M o N (13 o 14) - MINUTOS TRANSCURRIDOS
+        let prevTime = data[i][0]; // Toma el Timestamp de creación original (Columna A)
+        if (prevTime && !(prevTime instanceof Date)) prevTime = new Date(prevTime);
+        let mins = prevTime ? Math.round((now.getTime() - prevTime.getTime()) / 60000) : 0;
+        sheet.getRange(rowNum, calcColIdx).setValue(mins);
+
+        // 4. Columna P (16) - FIRMA DEL PAÑOLERO
+        if (panolOpId) {
+          sheet.getRange(rowNum, 16).setValue(panolOpId);
+        }
+        
+        updatedCount++;
       }
     }
-  } catch(e) { return { success: false }; } 
-  finally { lock.releaseLock(); }
-  return { success: false };
+
+    // Forzar la escritura física en la base de datos antes de liberar el sistema
+    SpreadsheetApp.flush();
+    return { success: updatedCount > 0, itemsUpdated: updatedCount };
+
+  } catch(e) { 
+    return { success: false, error: e.toString() }; 
+  } finally { 
+    lock.releaseLock(); 
+  }
 }
 
 // === MECHANIC APP ===
@@ -592,37 +621,21 @@ function markAsDelivered(reqId, panolOpId) {
   return _updateTxStatus(reqId, "ENTREGADO", 9, 11, 14, panolOpId); 
 }
 
-// === 3. ACTUALIZAR _updateTxStatus ===
-function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx, panolOpId) {
-  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
-  var data = sheet.getDataRange().getValues();
-  var now = new Date();
-  const lock = LockService.getScriptLock();
+// === AGREGAR AL FINAL DE Code.gs ===
+// Obtiene el catálogo de unidades (Tractor y Semi) para el autocompletado
+function getUnitCatalog() {
+  const sheet = _getSheet(CONFIG.SHEETS.OT);
+  const data = sheet.getDataRange().getValues();
+  const units = new Set();
   
-  try {
-    lock.waitLock(3000);
-    for (var i = data.length - 1; i >= 1; i--) {
-      if (data[i][1] == reqId) {
-        var prevTime = data[i][statusColIdx === 9 ? 0 : 9];
-        if(prevTime && !(prevTime instanceof Date)) prevTime = new Date(prevTime);
-        var mins = prevTime ? Math.round((now.getTime() - prevTime.getTime()) / 60000) : 0;
-        
-        sheet.getRange(i + 1, statusColIdx).setValue(status);   
-        sheet.getRange(i + 1, timeColIdx).setValue(now).setNumberFormat("dd/MM/yyyy HH:mm:ss");
-        sheet.getRange(i + 1, calcColIdx).setValue(mins);
-        
-        // NUEVO: Registrar al Pañolero responsable en la Columna P (Índice 16)
-        if (panolOpId) {
-          sheet.getRange(i + 1, 16).setValue(panolOpId); 
-        }
-        
-        return { success: true };
-      }
-    }
-  } catch(e) { 
-    return { success: false }; 
-  } finally { 
-    lock.releaseLock(); 
+  // i = 1 para saltar los encabezados
+  for (let i = 1; i < data.length; i++) {
+    const unit = String(data[i][0]).trim().toUpperCase(); // Columna A (Unidad)
+    const semi = String(data[i][2]).trim().toUpperCase(); // Columna C (Semi)
+    
+    if (unit) units.add(unit);
+    if (semi) units.add(semi);
   }
-  return { success: false };
+  
+  return Array.from(units).sort();
 }

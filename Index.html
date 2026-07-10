@@ -799,11 +799,7 @@
       }
 
       document.addEventListener('click', function(e) {
-        const container = document.querySelector('.autocomplete-container'); 
-        if (container && !container.contains(e.target)) {
-          document.getElementById('suggestions').style.display = "none";
-        }
-        
+ 
         const uInput = document.getElementById('unitInput');
         if (uInput && !uInput.parentElement.contains(e.target)) {
              document.getElementById('unitSuggestions').style.display = "none";
@@ -963,46 +959,73 @@
           setTimeout(() => el.style.backgroundColor = original || 'white', 600);
       }
 
-      function addToCart(e) {
-        e.preventDefault(); 
-        const itemVal = document.getElementById('itemInput').value;
-        const otVal = document.getElementById('otInput').value; 
-        const noteVal = document.getElementById('notesInput').value;
+function addToCart(e) {
+  // Prevenir envío accidental de formularios si se llama desde un submit
+  if (e && e.preventDefault) e.preventDefault(); 
+  
+  const itemVal = document.getElementById('itemInput').value;
+  const otVal = document.getElementById('otInput').value; 
+  const noteVal = document.getElementById('notesInput').value;
 
-        if(!otVal || otVal.includes("SIN")) return showModal("Falta OT", "La unidad/OT no es válida.", "⚠️");
-        if(!itemVal) return;
+  // Validación de seguridad
+  if (!otVal || otVal.includes("SIN")) return showModal("Falta OT", "La unidad/OT no es válida.", "⚠️");
+  if (!itemVal) return;
 
-        // Destination Logic
-        const destType = document.getElementById('currentItemDest').value;
-        let finalItemName = itemVal;
-        let destLabel = "TRACTOR"; // Internal/Display
+  // Lógica de Destino (Tractor vs Semi)
+  const destType = document.getElementById('currentItemDest').value;
+  let finalItemName = itemVal;
+  let destLabel = "TRACTOR"; // Internal/Display
 
-        if (destType === 'SEMI') {
-           const semiPlate = document.getElementById('semiUnitInput').value;
-           // Append tag to item name so backend stores it without schema change
-           finalItemName = `${itemVal} [PARA SEMI: ${semiPlate}]`;
-           destLabel = "SEMI";
-        }
+  if (destType === 'SEMI') {
+     const semiPlate = document.getElementById('semiUnitInput').value;
+     // Etiqueta inyectada para el backend sin alterar el esquema
+     finalItemName = `${itemVal} [PARA SEMI: ${semiPlate}]`;
+     destLabel = "SEMI";
+  }
 
-        cartItems.push({ 
-            item: finalItemName, // This goes to DB
-            displayItem: itemVal, // Clean name for cart UI
-            qty: 1, 
-            notes: noteVal,
-            destination: destType 
-        });
-        
-        document.getElementById('itemInput').value = "";
-        document.getElementById('notesInput').value = "";
-        document.getElementById('suggestions').style.display = "none";
-        document.getElementById('itemInput').focus();
-        document.getElementById('notesDetails').removeAttribute('open');
-        
-        // Reset Toggle to Unit for next item (UX)
-        setDestination('UNIT');
+  // Ingreso a memoria
+  cartItems.push({ 
+      item: finalItemName, // Dato estricto para DB
+      displayItem: itemVal, // Nombre limpio para UI
+      qty: 1, 
+      notes: noteVal,
+      destination: destType 
+  });
+  
+  // =========================================================
+  // UX FEEDBACK & POKA-YOKE RESET (Ley de Prägnanz)
+  // =========================================================
+  
+  // 1. Limpieza de datos temporales
+  document.getElementById('itemInput').value = "";
+  document.getElementById('notesInput').value = "";
+  document.getElementById('notesDetails').removeAttribute('open');
+  
+  // 2. Restauración del Diseño Top-Down (Bloqueo de seguridad)
+  const catSelect = document.getElementById('category-select');
+  const itemInp = document.getElementById('itemInput');
+  
+  if (catSelect) {
+    catSelect.value = ""; // Limpia el rubro
+  }
+  
+  if (itemInp) {
+     itemInp.setAttribute('disabled', 'true');
+     itemInp.disabled = true;
+     itemInp.placeholder = "🔒 Bloqueado: Elige un rubro primero";
+  }
+  
+  // 3. Reset de variables de control del flujo de autocompletado
+  if (typeof isCategoryValid !== 'undefined') isCategoryValid = false;
+  if (typeof isItemValid !== 'undefined') isItemValid = false;
+  if (typeof currentFilteredProducts !== 'undefined') currentFilteredProducts = [];
+  
+  // 4. Restaurar Toggle al valor por defecto (Tractor) para prevenir errores
+  if (typeof setDestination === 'function') setDestination('UNIT');
 
-        renderCart();
-      }
+  // 5. Renderizar el estado visual actualizado
+  if (typeof renderCart === 'function') renderCart();
+}
 
       function renderCart() {
         const container = document.getElementById('cartContainer');
