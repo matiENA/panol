@@ -270,6 +270,37 @@
     .btn-cancel { background: #e0e0e0; color: #555; }
     #returnReasonInput { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; margin-top: 10px; outline: none; transition: 0.2s; }
     #returnReasonInput:focus { border-color: var(--blue); }
+
+    /* Layout para los buscadores */
+.search-layout-wrapper {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  max-width: 820px;
+  margin-bottom: 24px;
+}
+
+/* Apilar en pantallas pequeñas */
+@media (max-width: 600px) {
+  .search-layout-wrapper {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Estilo de las etiquetas para claridad cognitiva */
+.search-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a4a4a;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* (El resto del CSS de .autocomplete-container, #function-input y .autocomplete-results se mantiene exactamente igual que antes para no romper lo actual) */
+
   </style>
 </head>
 <body>
@@ -374,6 +405,35 @@
                  <div id="suggestions" class="suggestions-list"></div>
               </div>
             </div>
+
+            <!-- Contenedor Maestro de Búsqueda -->
+<div class="search-layout-wrapper">
+
+  <!-- Buscador Principal Actual (Intacto) -->
+  <div class="autocomplete-container" id="function-search-container">
+    <label for="function-input" class="search-label">Búsqueda General (Nombre, Código)</label>
+    <input 
+      type="text" 
+      id="function-input" 
+      placeholder="Buscar repuestos..." 
+      autocomplete="off"
+    />
+    <ul id="autocomplete-results" class="autocomplete-results hidden"></ul>
+  </div>
+
+  <!-- NUEVO: Buscador Diferenciado por Rubro (Columna D) -->
+  <div class="autocomplete-container" id="category-search-container">
+    <label for="category-input" class="search-label">Filtrar por Rubro (Categoría)</label>
+    <input 
+      type="text" 
+      id="category-input" 
+      placeholder="Ej: Suspensión, Electricidad..." 
+      autocomplete="off"
+    />
+    <ul id="category-results" class="autocomplete-results hidden"></ul>
+  </div>
+
+</div>
 
             <div class="input-group" style="margin-bottom: 5px;">
               <details id="notesDetails">
@@ -1151,6 +1211,79 @@
              }).requestRefund(reqId, reason);
          });
       }
+
+      // --- 1. LÓGICA DEL BUSCADOR ACTUAL (Se mantiene intacta) ---
+// (Aquí va tu código actual para #function-input)
+
+// --- 2. NUEVA LÓGICA: BÚSQUEDA POR RUBRO (Columna D) ---
+const categoryInput = document.getElementById('category-input');
+const categoryResults = document.getElementById('category-results');
+
+// Simulamos los datos únicos extraídos de la Columna D ("RUBRO")
+// En Google Apps Script, traerías esta lista usando algo como: 
+// [...new Set(sheet.getRange("D2:D").getValues().flat().filter(String))]
+const rubrosDatabase = [
+  "Accesorios",
+  "Carrocería",
+  "Electricidad",
+  "Frenos",
+  "Lubricantes",
+  "Motor",
+  "Suspensión"
+];
+
+categoryInput.addEventListener('input', function() {
+  const query = this.value.toLowerCase().trim();
+  categoryResults.innerHTML = '';
+  
+  if (!query) {
+    categoryResults.classList.add('hidden');
+    return;
+  }
+
+  // Filtrar rubros que coincidan con la búsqueda
+  const matches = rubrosDatabase.filter(rubro => 
+    rubro.toLowerCase().includes(query)
+  );
+
+  if (matches.length > 0) {
+    categoryResults.classList.remove('hidden');
+    
+    matches.forEach(match => {
+      const li = document.createElement('li');
+      
+      // UX Feedback: Resaltar en negrita la parte que el usuario escribió (Ley de Similitud)
+      const regex = new RegExp(`(${query})`, "gi");
+      const highlightedName = match.replace(regex, "<span class='highlight'>$1</span>");
+      
+      li.innerHTML = `<span style="font-size: 14px;">${highlightedName}</span>`;
+      
+      // Acción al seleccionar un Rubro
+      li.addEventListener('click', () => {
+        categoryInput.value = match; // Autocompleta el input
+        categoryResults.classList.add('hidden');
+        
+        // AQUÍ DISPARAS LA ACCIÓN:
+        // Por ejemplo, filtrar la tabla principal de repuestos para mostrar solo los de este rubro.
+        console.log("Rubro seleccionado para filtrar:", match);
+        // aplicarFiltroRubro(match); 
+      });
+      
+      categoryResults.appendChild(li);
+    });
+  } else {
+    categoryResults.classList.remove('hidden');
+    categoryResults.innerHTML = `<li style="color: #999; cursor: default;">No se encontraron rubros.</li>`;
+  }
+});
+
+// Cerrar el dropdown del rubro si el usuario hace clic afuera
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('category-search-container').contains(e.target)) {
+    categoryResults.classList.add('hidden');
+  }
+});
+
     </script>
 </body>
 </html>
