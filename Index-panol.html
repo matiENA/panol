@@ -497,6 +497,58 @@
         transform: scale(1); 
       }
 
+      /* === ACTION GROUP (Ley de Proximidad) === */
+      .action-group {
+        display: flex;
+        gap: 8px;
+        padding: 12px 16px;
+        background: rgba(0, 0, 0, 0.1); /* Separa sutilmente el footer del cuerpo */
+        border-top: 1px solid var(--border);
+      }
+
+      .panol-select {
+        flex: 1;
+        background: var(--bg);
+        color: var(--text-white);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23c9d1d9' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+      }
+
+      .panol-select:focus {
+        border-color: var(--blue);
+      }
+
+      /* Botón ajustado para compartir espacio */
+      .btn-action.btn-ready {
+        flex: 1;
+        padding: 10px;
+        margin: 0; /* Remueve márgenes heredados si los hubiera */
+      }
+
+      /* Poka-Yoke: Animación de Error */
+      .shake-error {
+        animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        border-color: var(--red) !important;
+        color: var(--red) !important;
+        background-color: rgba(218, 54, 51, 0.1) !important;
+      }
+      @keyframes shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0); }
+        20%, 80% { transform: translate3d(2px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+        40%, 60% { transform: translate3d(4px, 0, 0); }
+      }
+
     </style>
 </head>
 <body>
@@ -930,6 +982,70 @@
             console.error(err);
           })
           .assignOperatorToOrder(reqId, opId);
+      }
+
+      // === GLOBAL STATE ===
+      let allOrders = [];
+      let expandedCards = new Set();
+      let panolStaffList = []; // <-- NUEVO: Lista de operarios de pañol
+      let filters = { status: 'ALL', product: 'ALL', search: '' };
+
+      // === INIT ===
+      // 1. Cargamos primero el staff. Cuando responda, iniciamos el loop de datos.
+      google.script.run
+        .withSuccessHandler(staff => {
+          panolStaffList = staff;
+          loadData(); 
+          setInterval(loadData, 5000);
+          setInterval(updateClock, 1000);
+        })
+        .getPanolStaff();
+
+      // === DENTRO DE TU FUNCIÓN renderCard(o) ===
+      
+      // 2. Generar las opciones del selector dinámicamente
+      const staffOptions = panolStaffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      // 3. Reemplazar la constante footerHtml
+      const footerHtml = isReady
+        ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
+        : `<div class="action-group">
+             <select id="panol-op-${o.reqId}" class="panol-select">
+               <option value="" disabled selected>👤 Tu nombre...</option>
+               ${staffOptions}
+             </select>
+             <button class="btn-action btn-ready" onclick="markReady('${o.reqId}')">✓ LISTO</button>
+           </div>`;
+
+      // === ACTUALIZAR LA FUNCIÓN markReady ===
+      function markReady(reqId) {
+        const selectEl = document.getElementById(`panol-op-${reqId}`);
+        const panolOpId = selectEl.value;
+
+        // POKA-YOKE: Si no eligió su nombre, agitamos el selector y abortamos
+        if (!panolOpId) {
+          selectEl.classList.remove('shake-error');
+          void selectEl.offsetWidth; // Forzar reflow para reiniciar animación
+          selectEl.classList.add('shake-error');
+          return;
+        }
+
+        const card = document.getElementById(`card-${reqId}`);
+        if (card) {
+          card.style.opacity = '0.5';
+          card.style.pointerEvents = 'none';
+        }
+        
+        google.script.run
+          .withSuccessHandler(() => loadData())
+          .withFailureHandler(err => {
+            console.error('Mark ready error:', err);
+            if (card) {
+              card.style.opacity = '1';
+              card.style.pointerEvents = 'auto';
+            }
+          })
+          .markAsReady(reqId, panolOpId); // <-- PASAMOS EL ID AL BACKEND
       }
     </script>
 </body>

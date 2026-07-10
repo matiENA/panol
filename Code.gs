@@ -560,27 +560,69 @@ function assignOperatorToOrder(reqId, opId) {
   }
 }
 
-// ==========================================
-// 2. MODIFICAR EN TU FUNCIÓN getPendingOrdersEnriched()
-// ==========================================
-// Busca el objeto ordersMap[reqId] = { ... } y agrégale la propiedad assignedOpId:
 
-      if (!ordersMap[reqId]) {
-        const unitInfo = String(row[5] || '');
-        const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
-        const otInfo = otMap[primaryUnit] || {};
+
+// === 1. NUEVA FUNCIÓN: Obtener solo al personal de Pañol ===
+function getPanolStaff() {
+  const sheet = _getSheet(CONFIG.SHEETS.STAFF);
+  const data = sheet.getDataRange().getValues();
+  const panoleros = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0]).trim(); // OP_ID
+    const name = String(data[i][1]).trim(); // FULL_NAME
+    const role = String(data[i][2]).trim().toUpperCase(); // ROLE
+    const hasAppAccess = data[i][11] === true; // Columna L (ACCESO_APP)
+    
+    // Filtramos estrictamente por el rol designado para evitar listas largas
+    if (id && name && hasAppAccess && (role === 'PANOL' || role === 'PAÑOL')) {
+      panoleros.push({ id: id, name: name });
+    }
+  }
+  return panoleros.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// === 2. ACTUALIZAR FUNCIONES DE ESTADO ===
+// Ahora reciben un segundo parámetro: panolOpId
+function markAsReady(reqId, panolOpId) { 
+  return _updateTxStatus(reqId, "LISTO", 9, 10, 13, panolOpId); 
+}
+
+function markAsDelivered(reqId, panolOpId) { 
+  return _updateTxStatus(reqId, "ENTREGADO", 9, 11, 14, panolOpId); 
+}
+
+// === 3. ACTUALIZAR _updateTxStatus ===
+function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx, panolOpId) {
+  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  var data = sheet.getDataRange().getValues();
+  var now = new Date();
+  const lock = LockService.getScriptLock();
+  
+  try {
+    lock.waitLock(3000);
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (data[i][1] == reqId) {
+        var prevTime = data[i][statusColIdx === 9 ? 0 : 9];
+        if(prevTime && !(prevTime instanceof Date)) prevTime = new Date(prevTime);
+        var mins = prevTime ? Math.round((now.getTime() - prevTime.getTime()) / 60000) : 0;
         
-        ordersMap[reqId] = { 
-          reqId: reqId, 
-          timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], 
-          opInfo: row[3], 
-          otNumber: row[4], 
-          unitInfo: unitInfo, 
-          status: status, 
-          items: [], 
-          notes: row[11],
-          product: otInfo.product || '',
-          brand: otInfo.brand || '',
-          assignedOpId: String(row[14] || '') // <-- NUEVO: Lee la Columna O
-        };
+        sheet.getRange(i + 1, statusColIdx).setValue(status);   
+        sheet.getRange(i + 1, timeColIdx).setValue(now).setNumberFormat("dd/MM/yyyy HH:mm:ss");
+        sheet.getRange(i + 1, calcColIdx).setValue(mins);
+        
+        // NUEVO: Registrar al Pañolero responsable en la Columna P (Índice 16)
+        if (panolOpId) {
+          sheet.getRange(i + 1, 16).setValue(panolOpId); 
+        }
+        
+        return { success: true };
       }
+    }
+  } catch(e) { 
+    return { success: false }; 
+  } finally { 
+    lock.releaseLock(); 
+  }
+  return { success: false };
+}
