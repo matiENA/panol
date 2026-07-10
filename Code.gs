@@ -341,12 +341,34 @@ function _updateTxStatus(reqId, status, statusColIdx, timeColIdx, calcColIdx) {
 }
 
 // === MECHANIC APP ===
+// === ACTUALIZAR EN Code.gs ===
+
+// === ACTUALIZAR EN Code.gs ===
+
 function getMechanicConfig(opId) {
-  var sheet = _getSheet(CONFIG.SHEETS.STAFF);
-  var data = sheet.getDataRange().getValues();
-  var row = data.find(r => String(r[0]).trim() === String(opId).trim());
-  if (!row) return { success: false, error: "Usuario no encontrado" };
-  var boxes = row.slice(6, 11).map(String).filter(c => c);
+  const sheet = _getSheet(CONFIG.SHEETS.STAFF);
+  const data = sheet.getDataRange().getValues();
+  
+  // Buscamos al operario coincidente
+  const row = data.find(r => {
+    const isIdMatch = String(r[0]).trim() === String(opId).trim(); // Columna A
+    
+    // Poka-Yoke: Leemos la Columna L (Índice 11) para validar el acceso.
+    // Solo permitimos el ingreso si la casilla está explícitamente en TRUE.
+    const hasAppAccess = r[11] === true; 
+    
+    return isIdMatch && hasAppAccess;
+  });
+
+  // UX Feedback: Mensaje unificado para proteger la lógica interna del sistema
+  if (!row) {
+    return { success: false, error: "Usuario no encontrado o sin acceso activo" };
+  }
+
+  // Nota: Mantenemos el slice(6, 11) asumiendo que tus ubicaciones/boxes 
+  // siguen estando desde la Columna G (6) hasta la K (10).
+  const boxes = row.slice(6, 11).map(String).filter(c => c);
+  
   return { success: true, name: row[1], role: row[2], boxes: boxes };
 }
 
@@ -490,3 +512,75 @@ function _updateItemCellSafe(id, colIndex, value) {
 
 const WAREHOUSE_USERS = { "1": "Ema", "6": "Matias" };
 function validateWarehouseUser(key) { return WAREHOUSE_USERS[key] || null; }
+
+// ==========================================
+// 1. AGREGAR AL FINAL DE TU Code.gs
+// ==========================================
+
+// Obtiene la lista de operarios activos para el dropdown
+function getStaffOptions() {
+  const sheet = _getSheet(CONFIG.SHEETS.STAFF); // Tab DB_STAFF
+  const data = sheet.getDataRange().getValues();
+  const staff = [];
+  
+  // Empezamos en i = 1 para saltar los encabezados
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0]).trim();
+    const name = String(data[i][1]).trim();
+    if (id && name) {
+      staff.push({ id: id, name: name });
+    }
+  }
+  
+  // Ordenar alfabéticamente para mejor UX
+  return staff.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Guarda la asignación en la Columna O de DB_TRANSACTIONS
+function assignOperatorToOrder(reqId, opId) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+    const data = sheet.getDataRange().getValues();
+    
+    // Buscamos la transacción desde el final (más reciente)
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][1]) === String(reqId)) {
+        // La Columna O es el índice 15 en getRange (1-based)
+        sheet.getRange(i + 1, 15).setValue(opId);
+        return { success: true };
+      }
+    }
+    return { success: false, error: "Pedido no encontrado" };
+  } catch (e) {
+    return { success: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// 2. MODIFICAR EN TU FUNCIÓN getPendingOrdersEnriched()
+// ==========================================
+// Busca el objeto ordersMap[reqId] = { ... } y agrégale la propiedad assignedOpId:
+
+      if (!ordersMap[reqId]) {
+        const unitInfo = String(row[5] || '');
+        const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
+        const otInfo = otMap[primaryUnit] || {};
+        
+        ordersMap[reqId] = { 
+          reqId: reqId, 
+          timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], 
+          opInfo: row[3], 
+          otNumber: row[4], 
+          unitInfo: unitInfo, 
+          status: status, 
+          items: [], 
+          notes: row[11],
+          product: otInfo.product || '',
+          brand: otInfo.brand || '',
+          assignedOpId: String(row[14] || '') // <-- NUEVO: Lee la Columna O
+        };
+      }

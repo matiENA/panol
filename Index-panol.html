@@ -447,6 +447,56 @@
         main { padding: 16px; }
         .grid { grid-template-columns: 1fr; }
       }
+
+      /* === DROPDOWN DE OPERARIOS (Poka-Yoke & Gestalt) === */
+      .operator-select-wrapper {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .operator-select {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid transparent;
+        color: var(--text-white);
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        appearance: none; /* Elimina la flecha fea por defecto */
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23c9d1d9' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        padding-right: 24px;
+      }
+      
+      .operator-select:hover, .operator-select:focus {
+        border-color: var(--blue);
+        background-color: rgba(0, 0, 0, 0.2);
+        outline: none;
+      }
+      
+      .operator-select option {
+        background: var(--card-bg);
+        color: var(--text-white);
+      }
+
+      .save-feedback {
+        font-size: 0.9rem;
+        opacity: 0;
+        transform: scale(0.8);
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .save-feedback.show { 
+        opacity: 1; 
+        transform: scale(1); 
+      }
+
     </style>
 </head>
 <body>
@@ -804,6 +854,83 @@
       loadData();
       setInterval(loadData, 5000);
       setInterval(updateClock, 1000);
+
+      // 1. Agregar a tus Variables Globales
+      let staffList = [];
+
+      // 2. Modificar el INIT (Cargar operarios antes de los pedidos)
+      function initApp() {
+        google.script.run
+          .withSuccessHandler(res => {
+            staffList = res; // Guardamos la lista de operarios
+            loadData();      // Ahora cargamos las cards
+            setInterval(loadData, 5000);
+            setInterval(updateClock, 1000);
+          })
+          .getStaffOptions();
+      }
+      
+      // Reemplaza tus llamadas de inicio al final del script por:
+      initApp();
+
+      // 3. Reemplazar la sección /* Mechanic Info */ dentro de tu function renderCard(o)
+      
+      // Generar las opciones del dropdown dinámicamente
+      const optionsHtml = staffList.map(staff => 
+        `<option value="${staff.id}" ${o.assignedOpId === String(staff.id) ? 'selected' : ''}>
+           ${staff.name}
+         </option>`
+      ).join('');
+
+      // Construir la nueva fila
+      const mechanicHtml = `
+        <div class="mechanic-row">
+          <div class="mechanic-avatar">${initials}</div>
+          <div class="operator-select-wrapper">
+             <select class="operator-select" onchange="assignOperator('${o.reqId}', this)">
+               <option value="" disabled ${!o.assignedOpId ? 'selected' : ''}>Asignar operario...</option>
+               ${optionsHtml}
+             </select>
+             <span class="save-feedback" id="feedback-${o.reqId}">✅</span>
+          </div>
+        </div>
+      `;
+
+      // Luego, en tu "return `...`" de renderCard, reemplaza esto:
+      // <div class="mechanic-row">...</div>
+      // Por tu nueva variable:
+      // ${mechanicHtml}
+
+
+      // 4. Agregar la función de Auto-Guardado (Feedback Inmediato)
+      function assignOperator(reqId, selectElement) {
+        const opId = selectElement.value;
+        const feedbackEl = document.getElementById(`feedback-${reqId}`);
+        
+        // Estado visual de "cargando"
+        selectElement.style.opacity = '0.5';
+        feedbackEl.textContent = '⏳';
+        feedbackEl.classList.add('show');
+
+        google.script.run
+          .withSuccessHandler(res => {
+            selectElement.style.opacity = '1';
+            if (res.success) {
+              feedbackEl.textContent = '✅';
+              // Ocultar el check después de 2 segundos (Prägnanz: no saturar la vista)
+              setTimeout(() => feedbackEl.classList.remove('show'), 2000);
+            } else {
+              feedbackEl.textContent = '❌';
+              alert("Error al asignar: " + res.error);
+            }
+          })
+          .withFailureHandler(err => {
+            selectElement.style.opacity = '1';
+            feedbackEl.textContent = '❌';
+            console.error(err);
+          })
+          .assignOperatorToOrder(reqId, opId);
+      }
     </script>
 </body>
 </html>
