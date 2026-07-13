@@ -266,11 +266,26 @@ function getPendingOrders() {
   return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
-// Enriched version with product/brand data for Index-panol
+// === ACTUALIZAR EN Code.gs ===
+
 function getPendingOrdersEnriched() {
   const transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
   const otSheet = _getSheet(CONFIG.SHEETS.OT);
+  const itemSheet = _getSheet(CONFIG.SHEETS.ITEMS); // 1. Traemos DB_ITEMS
   
+  // 2. Mapeo de Items (Nombre -> ID y Ubicación)
+  const itemData = itemSheet.getDataRange().getValues();
+  const itemMap = {};
+  // i = 1 para saltar el encabezado. Col A = 0 (ID), Col B = 1 (Nombre), Col F = 5 (Ubicación)
+  for (let i = 1; i < itemData.length; i++) {
+    const iId = String(itemData[i][0]).trim();
+    const iName = String(itemData[i][1]).trim().toUpperCase();
+    const iLoc = String(itemData[i][5]).trim();
+    if (iName) {
+      itemMap[iName] = { id: iId, loc: iLoc || 'S/D' };
+    }
+  }
+
   // Build OT map (Unit -> Product/Brand)
   const otData = otSheet.getDataRange().getValues();
   const otMap = {};
@@ -308,7 +323,17 @@ function getPendingOrdersEnriched() {
           brand: otInfo.brand || ''
         };
       }
-      ordersMap[reqId].items.push({ name: String(row[6]), qty: row[7] });
+      
+      // 3. Cruzamos el Nombre del ítem pedido con nuestro Mapa de Items
+      const itemName = String(row[6]);
+      const itemDetails = itemMap[itemName.toUpperCase()] || { id: '---', loc: '?' };
+
+      ordersMap[reqId].items.push({ 
+        name: itemName, 
+        qty: row[7],
+        id: itemDetails.id,  // Inyectamos ID
+        loc: itemDetails.loc // Inyectamos Ubicación
+      });
     }
   }
   return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));

@@ -326,7 +326,7 @@
         font-size: 0.85rem; font-weight: 600; color: var(--text);
       }
 
-      /* Item List */
+/* === ITEM LIST (Gestalt: Proximidad y Jerarquía) === */
       .item-list {
         display: flex; flex-direction: column; gap: 0;
         background: rgba(0,0,0,0.2);
@@ -335,23 +335,53 @@
       }
 
       .item-row {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px; /* Separación clara entre Nombre y Datos de sistema */
+        padding: 12px 14px;
         border-bottom: 1px solid rgba(255,255,255,0.05);
       }
       .item-row:last-child { border-bottom: none; }
       .item-row.highlighted { background: rgba(35, 134, 54, 0.2); }
       
+      /* Fila Superior: Figura Principal (Nombre y Cantidad) */
+      .item-primary {
+        display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+      }
+
       .item-name { 
-        font-weight: 600; color: var(--text-white); font-size: 0.85rem;
-        flex: 1; padding-right: 10px;
+        font-weight: 700; color: var(--text-white); font-size: 0.9rem;
+        line-height: 1.3;
       }
       
       .item-qty { 
         background: var(--green); color: #fff; 
-        font-size: 0.7rem; font-weight: 800;
+        font-size: 0.75rem; font-weight: 800;
         padding: 3px 8px; border-radius: 4px;
         min-width: 32px; text-align: center;
+        flex-shrink: 0; /* Evita que la cantidad se aplaste */
+      }
+
+      /* Fila Inferior: Referencias del Sistema (ID y Ubicación) */
+      .item-secondary {
+        display: flex; justify-content: space-between; align-items: center;
+      }
+
+      .item-id {
+        font-size: 0.85rem; color: #a5b4fc; /* Azul claro para destacar sin opacar */
+        font-family: monospace; font-weight: 700;
+        background: rgba(165, 180, 252, 0.1); 
+        padding: 2px 6px; border-radius: 4px;
+        letter-spacing: 0.5px;
+      }
+
+      .item-loc {
+        font-size: 0.75rem; color: #58a6ff; 
+        background: rgba(56, 139, 253, 0.1); 
+        border: 1px solid rgba(56, 139, 253, 0.3); 
+        border-radius: 4px; padding: 4px 8px; 
+        text-align: center; font-weight: 800; 
+        white-space: nowrap;
       }
 
       /* Expandable Items */
@@ -359,15 +389,13 @@
       .hidden-items.show { display: block; }
       
       .expand-btn {
-        width: 100%; padding: 8px;
+        width: 100%; padding: 10px;
         background: rgba(56, 139, 253, 0.1);
         border: none; color: #58a6ff;
         font-size: 0.75rem; font-weight: 700;
-        cursor: pointer;
-        text-transform: uppercase;
+        cursor: pointer; text-transform: uppercase;
       }
       .expand-btn:hover { background: rgba(56, 139, 253, 0.2); }
-
       /* Notes */
       .note-box {
         margin-top: 10px;
@@ -623,6 +651,7 @@
       let allOrders = [];
       let expandedCards = new Set();
       let panolStaffList = []; // Lista de operarios de pañol
+      let pendingSelections = {}; // NUEVO: Memoria de selecciones { reqId: opId }
       let filters = {
         status: 'ALL',
         product: 'ALL',
@@ -776,6 +805,7 @@
         const initials = (o.opInfo || 'NN').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
         // Items
+// === DISEÑO DE SERVICIO: ITEMS (Fila 1: Nombre | Fila 2: ID + Loc) ===
         const MAX_VISIBLE = 3;
         const isExpanded = expandedCards.has(o.reqId);
         
@@ -788,10 +818,22 @@
             itemsHtml += `<div class="hidden-items" id="hidden-${o.reqId}">`;
           }
           
+          const itemId = item.id || 'S/D';
+          const itemLoc = item.loc || 'S/D';
+
           itemsHtml += `
             <div class="item-row ${highlightClass}">
-              <span class="item-name">${item.name}</span>
-              <span class="item-qty">x${item.qty}</span>
+              <!-- Nombre y Cantidad (Arriba) -->
+              <div class="item-primary">
+                <span class="item-name">${item.name}</span>
+                <span class="item-qty">x${item.qty}</span>
+              </div>
+              
+              <!-- ID y Ubicación (Abajo) -->
+              <div class="item-secondary">
+                <span class="item-id" title="ID de Artículo">#${itemId}</span>
+                <span class="item-loc" title="Ubicación física">📍 ${itemLoc}</span>
+              </div>
             </div>`;
         });
         
@@ -805,15 +847,24 @@
 
         const noteHtml = o.notes && o.notes.trim() ? `<div class="note-box">📝 ${o.notes}</div>` : '';
 
-        // === FOOTER & POKA-YOKE ===
-        // Opciones del personal de Pañol dinámicas
-        const staffOptions = panolStaffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+// === FOOTER & POKA-YOKE ===
+        
+        // 1. Verificamos si este pedido ya tiene una selección guardada en memoria
+        const savedOpId = pendingSelections[o.reqId];
+        const defaultSelected = !savedOpId ? 'selected' : '';
 
+        // 2. Armamos las opciones inyectando 'selected' si coincide con la memoria
+        const staffOptions = panolStaffList.map(s => {
+          const isSelected = savedOpId === String(s.id) ? 'selected' : '';
+          return `<option value="${s.id}" ${isSelected}>${s.name}</option>`;
+        }).join('');
+
+        // 3. Añadimos el onchange para actualizar la memoria en tiempo real
         const footerHtml = isReady
           ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
           : `<div class="action-group">
-               <select id="panol-op-${o.reqId}" class="panol-select">
-                 <option value="" disabled selected>👤 Tu nombre...</option>
+               <select id="panol-op-${o.reqId}" class="panol-select" onchange="pendingSelections['${o.reqId}'] = this.value">
+                 <option value="" disabled ${defaultSelected}>👤 Tu nombre...</option>
                  ${staffOptions}
                </select>
                <button class="btn-action btn-ready" onclick="markReady('${o.reqId}')">✓ LISTO</button>
@@ -868,15 +919,14 @@
         applyFilters(); 
       }
 
-      function markReady(reqId) {
+function markReady(reqId) {
         const selectEl = document.getElementById(`panol-op-${reqId}`);
         const panolOpId = selectEl ? selectEl.value : null;
 
-        // POKA-YOKE: Validación de Seguridad (El sistema "habla")
         if (!panolOpId) {
           if (selectEl) {
             selectEl.classList.remove('shake-error');
-            void selectEl.offsetWidth; // Reflow
+            void selectEl.offsetWidth; 
             selectEl.classList.add('shake-error');
           }
           return;
@@ -889,7 +939,10 @@
         }
         
         google.script.run
-          .withSuccessHandler(() => loadData())
+          .withSuccessHandler(() => {
+            delete pendingSelections[reqId]; // Limpiamos la memoria al tener éxito
+            loadData();
+          })
           .withFailureHandler(err => {
             console.error('Mark ready error:', err);
             if (card) {
@@ -897,7 +950,7 @@
               card.style.pointerEvents = 'auto';
             }
           })
-          .markAsReady(reqId, panolOpId); // <- ENVIAMOS EL ID AL BACKEND
+          .markAsReady(reqId, panolOpId); 
       }
 
       // === UTILITIES ===
