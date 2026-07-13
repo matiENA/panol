@@ -402,15 +402,40 @@ function getMechanicConfig(opId) {
 }
 
 function getMechanicOrders(opId) {
-  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
-  var data = sheet.getDataRange().getValues();
-  var res = [], sId = String(opId).trim();
-  for(var i = Math.max(1, data.length - 300); i < data.length; i++) {
-    if(String(data[i][2]).replace("'","").trim() === sId && ["PENDIENTE","LISTO","ENTREGADO","DEVOLUCION"].includes(String(data[i][8]))) {
-      res.push({reqId:data[i][1], otNumber:data[i][4], item:data[i][6], qty:data[i][7], status:data[i][8]});
+  const sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const data = sheet.getDataRange().getValues();
+  const sId = String(opId).trim();
+  
+  // Usamos un objeto para agrupar (agrupación por Gestalt)
+  const ordersMap = {};
+
+  for (let i = Math.max(1, data.length - 300); i < data.length; i++) {
+    const rowOpId = String(data[i][2]).replace(/'/g, "").trim();
+    const status = String(data[i][8]);
+
+    if (rowOpId === sId && ["PENDIENTE","LISTO","ENTREGADO","DEVOLUCION"].includes(status)) {
+      const reqId = data[i][1];
+
+      // Si el pedido no existe en el mapa, lo creamos
+      if (!ordersMap[reqId]) {
+        ordersMap[reqId] = {
+          reqId: reqId,
+          otNumber: data[i][4],
+          status: status, // Como el backend ya actualiza en bloque, todos comparten el mismo estado
+          items: []
+        };
+      }
+      
+      // Inyectamos el repuesto a la lista interna del pedido
+      ordersMap[reqId].items.push({ 
+        name: data[i][6], 
+        qty: data[i][7] 
+      });
     }
   }
-  return res.reverse();
+  
+  // Convertimos el mapa a un Array y lo revertimos para ver los más nuevos arriba
+  return Object.values(ordersMap).reverse();
 }
 
 function submitBatchRequest(data) {
@@ -638,4 +663,53 @@ function getUnitCatalog() {
   }
   
   return Array.from(units).sort();
+}
+
+// === AGREGAR A Code.gs ===
+
+function requestRefund(reqId, itemName, reason) {
+  const txSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const txData = txSheet.getDataRange().getValues();
+  const lock = LockService.getScriptLock();
+  
+  let updated = false;
+  let qtyToReturn = 0;
+
+  try {
+    lock.waitLock(5000);
+    
+    // Iteramos de arriba hacia abajo para encontrar el repuesto exacto
+    for (let i = 1; i < txData.length; i++) {
+      if (String(txData[i][1]).trim() === String(reqId).trim() && 
+          String(txData[i][6]).trim() === String(itemName).trim()) {
+        
+        // 1. Cambiamos el status a DEVOLUCION (Columna I -> Índice 8 / Rango 9)
+        txSheet.getRange(i + 1, 9).setValue("DEVOLUCION");
+        
+        // 2. Auditoría Front: Marcamos en la Columna O (Rango 15) el motivo
+        const fallbackReason = reason ? reason : "Sin motivo";
+        txSheet.getRange(i + 1, 15).setValue("DEVUELTO: " + fallbackReason);
+        
+        // Capturamos la cantidad a devolver
+        qtyToReturn = Number(txData[i][7]) || 1;
+        updated = true;
+        
+        // Como solo devolvemos una línea específica a la vez, cortamos el ciclo
+        break; 
+      }
+    }
+
+    // 3. Devolvemos el stock a DB_ITEMS
+    if (updated && qtyToReturn > 0) {
+      // Pasamos qtyToReturn en POSITIVO para que sume al stock
+      updateStockByName(itemName, qtyToReturn); 
+    }
+
+    return { success: updated };
+    
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
 }
