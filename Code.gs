@@ -405,8 +405,6 @@ function getMechanicOrders(opId) {
   const sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
   const data = sheet.getDataRange().getValues();
   const sId = String(opId).trim();
-  
-  // Usamos un objeto para agrupar (agrupación por Gestalt)
   const ordersMap = {};
 
   for (let i = Math.max(1, data.length - 300); i < data.length; i++) {
@@ -416,26 +414,36 @@ function getMechanicOrders(opId) {
     if (rowOpId === sId && ["PENDIENTE","LISTO","ENTREGADO","DEVOLUCION"].includes(status)) {
       const reqId = data[i][1];
 
-      // Si el pedido no existe en el mapa, lo creamos
       if (!ordersMap[reqId]) {
         ordersMap[reqId] = {
           reqId: reqId,
           otNumber: data[i][4],
-          status: status, // Como el backend ya actualiza en bloque, todos comparten el mismo estado
           items: []
         };
       }
       
-      // Inyectamos el repuesto a la lista interna del pedido
+      // Guardamos el estado INDIVIDUAL de cada repuesto
       ordersMap[reqId].items.push({ 
         name: data[i][6], 
-        qty: data[i][7] 
+        qty: data[i][7],
+        status: status 
       });
     }
   }
   
-  // Convertimos el mapa a un Array y lo revertimos para ver los más nuevos arriba
-  return Object.values(ordersMap).reverse();
+  // Diseño de Servicio: Determinamos el estado global del pedido basado en sus partes
+  const results = Object.values(ordersMap).map(order => {
+    const statuses = order.items.map(i => i.status);
+    
+    if (statuses.includes("PENDIENTE")) order.status = "PENDIENTE";
+    else if (statuses.includes("LISTO")) order.status = "LISTO";
+    else if (statuses.includes("ENTREGADO")) order.status = "ENTREGADO"; // Si queda al menos 1 entregado, permite devolver
+    else order.status = "DEVOLUCION"; // Solo si TODOS están devueltos
+    
+    return order;
+  });
+
+  return results.reverse();
 }
 
 function submitBatchRequest(data) {
@@ -454,21 +462,57 @@ function submitBatchRequest(data) {
   finally { lock.releaseLock(); }
 }
 
-// === INVENTORY ===
-function findUnitOrOt(query) {
+// === REEMPLAZAR EN Code.gs ===
+
+function findUnitOrOt(query, type) {
   const sheet = _getSheet(CONFIG.SHEETS.OT);
   const data = sheet.getDataRange().getValues();
   const q = String(query).trim().toUpperCase();
-  if (q.length < 2) return null;
+
+  // Poka-Yoke: Evitar búsquedas vacías o muy cortas
+  if (q.length < 2) return { success: false };
+
+  // Iteramos la Base de Datos (Omitiendo el encabezado)
   for (let i = 1; i < data.length; i++) {
-    const unit = String(data[i][0]).toUpperCase().trim();
-    const ot = String(data[i][1]).trim();
-    const semi = String(data[i][2]).toUpperCase().trim();
-    if (unit === q || semi === q || unit.includes(q) || semi.includes(q)) return { success: true, unit: unit, ot: ot, semi: semi };
+    const unit = String(data[i][0]).toUpperCase().trim();     // Col A: Patente Tractor
+    const ot = String(data[i][1]).trim().toUpperCase();       // Col B: OT Tractor
+    const semi = String(data[i][2]).toUpperCase().trim();     // Col C: Patente Semi
+    const semiOt = String(data[i][3]).trim().toUpperCase();   // Col D: OT Semi (Alternativa)
+
+    let isMatch = false;
+
+    // Lógica Bidireccional basada en el 'type' que envía el frontend
+    if (type === 'OT') {
+        // Búsqueda estricta por OT
+        if (ot === q) isMatch = true;
+    } else if (type === 'UNIT') {
+        // Búsqueda flexible por Patente
+        if (unit === q || unit.includes(q)) isMatch = true;
+    } else if (type === 'SEMI_OT') {
+        // Búsqueda estricta por OT de Semi
+        if (semiOt === q || ot === q) isMatch = true;
+    } else if (type === 'SEMI') {
+        // Búsqueda flexible por Patente de Semi
+        if (semi === q || semi.includes(q)) isMatch = true;
+    } else {
+        // Fallback: Si no hay 'type', busca en cualquier lado
+        if (unit.includes(q) || semi.includes(q) || ot === q || semiOt === q) isMatch = true;
+    }
+
+    // Si encontramos coincidencia, devolvemos la Fila Completa como el Frontend espera
+    if (isMatch) {
+      return { 
+        success: true, 
+        unit: unit, 
+        ot: ot, 
+        semi: semi, 
+        semiOt: semiOt || ot // Diseño de Servicio: Si el Semi no tiene OT propia, hereda la del Tractor
+      };
+    }
   }
+  
   return { success: false };
 }
-
 // === REEMPLAZAR ESTA FUNCIÓN EN TU Code.gs ===
 
 function getItemCatalog() {
@@ -678,34 +722,31 @@ function requestRefund(reqId, itemName, reason) {
   try {
     lock.waitLock(5000);
     
-    // Iteramos de arriba hacia abajo para encontrar el repuesto exacto
     for (let i = 1; i < txData.length; i++) {
       if (String(txData[i][1]).trim() === String(reqId).trim() && 
           String(txData[i][6]).trim() === String(itemName).trim()) {
         
-        // 1. Cambiamos el status a DEVOLUCION (Columna I -> Índice 8 / Rango 9)
+        // POKA-YOKE: Prevenir doble devolución (Evita duplicar el stock matemáticamente)
+        if (String(txData[i][8]).trim() === "DEVOLUCION") {
+            return { success: false, error: "Este ítem ya fue devuelto previamente." };
+        }
+
+        // Ejecutamos la devolución
         txSheet.getRange(i + 1, 9).setValue("DEVOLUCION");
-        
-        // 2. Auditoría Front: Marcamos en la Columna O (Rango 15) el motivo
         const fallbackReason = reason ? reason : "Sin motivo";
-        txSheet.getRange(i + 1, 15).setValue("DEVUELTO: " + fallbackReason);
+        txSheet.getRange(i + 1, 15).setValue("DEVUELTO: " + fallbackReason); // Columna O
         
-        // Capturamos la cantidad a devolver
         qtyToReturn = Number(txData[i][7]) || 1;
         updated = true;
-        
-        // Como solo devolvemos una línea específica a la vez, cortamos el ciclo
         break; 
       }
     }
 
-    // 3. Devolvemos el stock a DB_ITEMS
     if (updated && qtyToReturn > 0) {
-      // Pasamos qtyToReturn en POSITIVO para que sume al stock
       updateStockByName(itemName, qtyToReturn); 
     }
 
-    return { success: updated };
+    return { success: updated, error: updated ? null : "El repuesto exacto no fue encontrado." };
     
   } catch (e) {
     return { success: false, error: e.toString() };
