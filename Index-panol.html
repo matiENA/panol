@@ -7,6 +7,21 @@
     <title>Monitor Pañol</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
+
+      /* === SHAKE DE TARJETA (Alerta Global) === */
+      .shake-card {
+        animation: card-shake 0.5s cubic-bezier(.36,.07,.19,.97) both !important;
+        border-left-color: var(--red) !important;
+        box-shadow: 0 0 15px rgba(218, 54, 51, 0.4) !important;
+      }
+      
+      @keyframes card-shake {
+        10%, 90% { transform: translate3d(-2px, 0, 0); }
+        20%, 80% { transform: translate3d(4px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+        40%, 60% { transform: translate3d(6px, 0, 0); }
+      }
+
       :root {
         --bg: #0d1117;          
         --card-bg: #161b22;     
@@ -690,12 +705,6 @@
           .getPendingOrdersEnriched(); 
       }
 
-      function onDataReceived(orders) {
-        allOrders = orders || [];
-        updateStats();
-        applyFilters();
-        updateClock();
-      }
 
       // === FILTERING & SORTING ===
       function setFilter(type, value, btn) {
@@ -864,7 +873,7 @@
 
         // 3. Cadena HTML correcta (envuelta en backticks)
         const footerHtml = isReady
-          ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
+          ? `<div class="status-complete">⚡ LISTO PARA ENTREGAR</div>`
           : `<div class="action-group">
                <select id="panol-op-${o.reqId}" 
                        class="panol-select" 
@@ -985,7 +994,40 @@ function markReady(reqId) {
         pollingInterval = setInterval(loadData, 5000);
         console.log("▶️ Polling reanudado.");
       }
-      
+
+      // Añade esta variable arriba, junto a 'allOrders':
+      let lastPingMem = {}; 
+
+function onDataReceived(orders) {
+        allOrders = orders || [];
+        updateStats();
+        
+        // 1. Redibujamos primero las tarjetas (DOM Limpio)
+        applyFilters(); 
+        updateClock();
+
+        // 2. MOTOR RECEPTOR DE SEÑALES (Poka-Yoke de alertas)
+        allOrders.forEach(o => {
+          const card = document.getElementById(`card-${o.reqId}`);
+          if (!card) return;
+
+          // A. Cambiar Color
+          if (o.uiColor && o.uiColor !== 'default') {
+             card.style.borderLeftColor = `var(--${o.uiColor})`;
+          }
+
+          // B. Ejecutar Ping (Shake)
+          if (o.uiPing && String(o.uiPing) !== String(lastPingMem[o.reqId])) {
+             lastPingMem[o.reqId] = String(o.uiPing); // Guardamos la nueva huella de tiempo
+             
+             // Animación temporal con limpieza
+             card.classList.add('shake-card');
+             setTimeout(() => {
+                card.classList.remove('shake-card');
+             }, 1000); // Se limpia en 1 segundo para estar lista para el siguiente ping
+          }
+        });
+      }      
           </script>
 </body>
 </html>

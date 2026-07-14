@@ -266,78 +266,6 @@ function getPendingOrders() {
   return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
-// === ACTUALIZAR EN Code.gs ===
-
-function getPendingOrdersEnriched() {
-  const transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
-  const otSheet = _getSheet(CONFIG.SHEETS.OT);
-  const itemSheet = _getSheet(CONFIG.SHEETS.ITEMS); // 1. Traemos DB_ITEMS
-  
-  // 2. Mapeo de Items (Nombre -> ID y Ubicación)
-  const itemData = itemSheet.getDataRange().getValues();
-  const itemMap = {};
-  // i = 1 para saltar el encabezado. Col A = 0 (ID), Col B = 1 (Nombre), Col F = 5 (Ubicación)
-  for (let i = 1; i < itemData.length; i++) {
-    const iId = String(itemData[i][0]).trim();
-    const iName = String(itemData[i][1]).trim().toUpperCase();
-    const iLoc = String(itemData[i][5]).trim();
-    if (iName) {
-      itemMap[iName] = { id: iId, loc: iLoc || 'S/D' };
-    }
-  }
-
-  // Build OT map (Unit -> Product/Brand)
-  const otData = otSheet.getDataRange().getValues();
-  const otMap = {};
-  for (let i = 1; i < otData.length; i++) {
-    const unitId = String(otData[i][CONFIG.OT_COLS.UNIT_ID] || '').trim().toUpperCase();
-    if (unitId) {
-      otMap[unitId] = { 
-        product: otData[i][CONFIG.OT_COLS.PRODUCT] || '', 
-        brand: otData[i][CONFIG.OT_COLS.BRAND] || '' 
-      };
-    }
-  }
-  
-  const transData = transSheet.getDataRange().getValues();
-  const ordersMap = {};
-  
-  for (let i = Math.max(1, transData.length - 200); i < transData.length; i++) {
-    const row = transData[i], status = row[8], reqId = row[1];
-    if (status === "PENDIENTE" || status === "LISTO") {
-      if (!ordersMap[reqId]) {
-        const unitInfo = String(row[5] || '');
-        const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
-        const otInfo = otMap[primaryUnit] || {};
-        
-        ordersMap[reqId] = { 
-          reqId: reqId, 
-          timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], 
-          opInfo: row[3], 
-          otNumber: row[4], 
-          unitInfo: unitInfo, 
-          status: status, 
-          items: [], 
-          notes: row[11],
-          product: otInfo.product || '',
-          brand: otInfo.brand || ''
-        };
-      }
-      
-      // 3. Cruzamos el Nombre del ítem pedido con nuestro Mapa de Items
-      const itemName = String(row[6]);
-      const itemDetails = itemMap[itemName.toUpperCase()] || { id: '---', loc: '?' };
-
-      ordersMap[reqId].items.push({ 
-        name: itemName, 
-        qty: row[7],
-        id: itemDetails.id,  // Inyectamos ID
-        loc: itemDetails.loc // Inyectamos Ubicación
-      });
-    }
-  }
-  return Object.values(ordersMap).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-}
 
 function markAsReady(reqId) { return _updateTxStatus(reqId, "LISTO", 9, 10, 13); }
 function markAsDelivered(reqId) { return _updateTxStatus(reqId, "ENTREGADO", 9, 11, 14); }
@@ -778,4 +706,69 @@ function requestRefund(reqId, itemName, reason) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// === RUTAS PARA SEÑALES UI (Dashboard -> Pañol) ===
+function setUISignal(reqId, type, value) {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty(`${type.toUpperCase()}_${reqId}`, String(value));
+  return true;
+}
+
+// === ACTUALIZAR EN Code.gs ===
+function getPendingOrdersEnriched() {
+  const transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+  const otSheet = _getSheet(CONFIG.SHEETS.OT);
+  const itemSheet = _getSheet(CONFIG.SHEETS.ITEMS); 
+  
+  // Mapeo de Items (Nombre -> ID y Ubicación)
+  const itemData = itemSheet.getDataRange().getValues();
+  const itemMap = {};
+  for (let i = 1; i < itemData.length; i++) {
+    const iId = String(itemData[i][0]).trim();
+    const iName = String(itemData[i][1]).trim().toUpperCase();
+    const iLoc = String(itemData[i][5]).trim();
+    if (iName) itemMap[iName] = { id: iId, loc: iLoc || 'S/D' };
+  }
+
+  // Mapeo OT
+  const otData = otSheet.getDataRange().getValues();
+  const otMap = {};
+  for (let i = 1; i < otData.length; i++) {
+    const unitId = String(otData[i][CONFIG.OT_COLS.UNIT_ID] || '').trim().toUpperCase();
+    if (unitId) otMap[unitId] = { product: otData[i][CONFIG.OT_COLS.PRODUCT] || '', brand: otData[i][CONFIG.OT_COLS.BRAND] || '' };
+  }
+  
+  const transData = transSheet.getDataRange().getValues();
+  const ordersMap = {};
+  
+  for (let i = Math.max(1, transData.length - 200); i < transData.length; i++) {
+    const row = transData[i], status = row[8], reqId = row[1];
+    if (status === "PENDIENTE" || status === "LISTO") {
+      if (!ordersMap[reqId]) {
+        const unitInfo = String(row[5] || '');
+        const primaryUnit = unitInfo.split(/[\/+]/)[0].trim().toUpperCase();
+        const otInfo = otMap[primaryUnit] || {};
+        
+        ordersMap[reqId] = { 
+          reqId: reqId, timestamp: row[0] instanceof Date ? row[0].toISOString() : row[0], 
+          opInfo: row[3], otNumber: row[4], unitInfo: unitInfo, status: status, 
+          items: [], notes: row[11], product: otInfo.product || '', brand: otInfo.brand || ''
+        };
+      }
+      const itemName = String(row[6]);
+      const itemDetails = itemMap[itemName.toUpperCase()] || { id: '---', loc: 'S/D' };
+      ordersMap[reqId].items.push({ name: itemName, qty: row[7], id: itemDetails.id, loc: itemDetails.loc });
+    }
+  }
+
+  // LECTURA DE SEÑALES UI PARA EL DASHBOARD
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const results = Object.values(ordersMap).map(order => {
+    order.uiColor = props[`COLOR_${order.reqId}`] || 'default';
+    order.uiPing = props[`PING_${order.reqId}`] || null;
+    return order;
+  });
+
+  return results.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }

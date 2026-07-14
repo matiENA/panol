@@ -1,1494 +1,354 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
+<head>
     <base target="_top">
     <meta charset="utf-8">
-    <title>Panol Cloud | Command Center</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard Control</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
-      /* === THEME SYSTEM: 3 Palettes === */
+      /* --- MISMAS VARIABLES Y BASE DE INDEX-PANOL --- */
       :root {
-        /* Dark Mode (Default) - Pure dark */
-        --bg: #09090b; 
-        --panel: #18181b; 
-        --card: #0f0f11;
-        --border: #27272a;
-        --border-hover: #3f3f46;
-        --text: #e4e4e7;
-        --text-muted: #71717a;
-        --text-bright: #fafafa;
+        --bg: #0d1117; --card-bg: #161b22; --panel-bg: #0d1117;
+        --text: #c9d1d9; --text-white: #f0f6fc; --text-muted: #8b949e;
+        --blue: #365BA5; --green: #238636; --red: #da3633; 
+        --orange: #f59e0b; --purple: #a855f7; --cyan: #06b6d4; --border: #30363d;
         
-        /* Status Colors */
-        --shop: #f59e0b; 
-        --mech: #22c55e; 
-        --danger: #ef4444;
-        --accent: #3b82f6;
-        
-        /* Brand Badge Colors */
-        --badge-iveco: #1e40af;
-        --badge-scania: #be123c;
-        --badge-volvo: #0369a1;
-        --badge-mercedes: #374151;
-        --badge-volkswagen: #1d4ed8;
-        --badge-ford: #1e3a8a;
-        --badge-renault: #fbbf24;
-        --badge-default: #3f3f46;
-        
-        /* Product Badge Colors */
-        --badge-liviano: #059669;
-        --badge-pesado: #7c3aed;
-        --badge-semi: #0891b2;
-        --badge-product-default: #52525b;
-        
-        /* Zone Badge Colors */
-        --badge-zone-1: #ea580c;
-        --badge-zone-2: #0d9488;
-        --badge-zone-3: #7c3aed;
-        --badge-zone-default: #525252;
-        
-        /* Rating Colors */
-        --rating-positive: #22c55e;
-        --rating-negative: #ef4444;
+        --color-metanol: #EF4444; --text-metanol: #ffffff; 
+        --color-glp: #F59E0B; --text-glp: #1f2937; 
+        --color-campo: #10B981; --text-campo: #ffffff; 
+        --color-liviano: #6366F1; --text-liviano: #ffffff;
+        --color-abastecedor: #D946EF; --text-abastecedor: #ffffff;
+        --color-gral: #6B7280; --text-gral: #ffffff;
       }
-      
-      /* Charcoal Mode - Softer dark for ambient light */
-      [data-theme="charcoal"] {
-        --bg: #1a1a1f; 
-        --panel: #242429; 
-        --card: #1e1e23;
-        --border: #35353d;
-        --border-hover: #4a4a55;
-        --text: #d4d4dc;
-        --text-muted: #8a8a96;
-        --text-bright: #f0f0f5;
-      }
-      
-      /* Light Mode - Clean and professional */
-      [data-theme="light"] {
-        --bg: #f4f4f5; 
-        --panel: #ffffff; 
-        --card: #ffffff;
-        --border: #e4e4e7;
-        --border-hover: #d4d4d8;
-        --text: #27272a;
-        --text-muted: #71717a;
-        --text-bright: #09090b;
-        --accent: #2563eb;
-      }
-      
-      /* Theme Toggle Button */
-      .theme-toggle {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        padding: 4px;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-      }
-      
-      .theme-btn {
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: none;
-        background: transparent;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
-        transition: all 0.2s;
-      }
-      
-      .theme-btn:hover {
-        color: var(--text);
-      }
-      
-      .theme-btn.active {
-        background: var(--accent);
-        color: white;
-      }
-      
-      body { 
-        background: var(--bg); 
-        color: var(--text); 
-        font-family: 'Inter', sans-serif; 
-        height: 100vh; 
-        display: flex; 
-        overflow: hidden; 
-      }
-      
-      .mono { font-family: 'Roboto Mono', monospace; }
-      
-      /* Scrollbar */
-      ::-webkit-scrollbar { width: 6px; height: 6px; }
-      ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-      ::-webkit-scrollbar-track { background: transparent; }
+      * { box-sizing: border-box; }
+      body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 0; min-height: 100vh; }
 
-      /* Selection States */
-      .selected-primary { 
-        border: 2px solid #3b82f6 !important; 
-        background: #1e1e24; 
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
-      }
-      
-      .mech-card.active { 
-        background: #27272a; 
-        border-color: #3f3f46; 
-      }
-      .mech-card:hover { background: #27272a; }
+      /* HEADER */
+      header { position: sticky; top: 0; z-index: 100; background: var(--panel-bg); border-bottom: 1px solid var(--border); padding: 16px 24px; }
+      .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+      .header-left { display: flex; align-items: center; gap: 20px; }
+      h1 { margin: 0; font-size: 1.5rem; font-weight: 900; color: var(--text-white); }
+      .admin-badge { display: flex; align-items: center; gap: 6px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--purple); text-transform: uppercase; }
+      .header-right { display: flex; align-items: center; gap: 16px; }
+      #clock { font-family: 'Inter', monospace; font-size: 1.1rem; color: var(--text-muted); font-weight: 600; background: var(--card-bg); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); }
+      .control-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .search-box { flex: 1; min-width: 250px; position: relative; }
+      .search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border); color: var(--text-white); padding: 10px 12px 10px 38px; border-radius: 8px; font-size: 0.9rem; font-family: 'Inter', sans-serif; }
+      .search-input:focus { outline: none; border-color: var(--purple); }
+      .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 0.9rem; color: var(--text-muted); pointer-events: none; }
 
-      /* Card Transitions */
-      .tx-card { 
-        transition: all 0.2s ease; 
-        border: 1px solid transparent; 
-      }
-      .tx-card:hover { 
-        border-color: #3f3f46; 
-        background: #18181b; 
-        transform: translateY(-1px);
-      }
+      /* GRID & CARDS (Igual a Pañol) */
+      main { padding: 24px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; align-items: start; }
       
-      /* Animations */
-      .fade-in { animation: fadeIn 0.4s ease-out forwards; }
-      @keyframes fadeIn { 
-        from { opacity: 0; transform: translateY(8px); } 
-        to { opacity: 1; transform: translateY(0); } 
-      }
+      .card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); border-left: 5px solid var(--border); display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.3); overflow: hidden; transition: border-color 0.3s; }
+      .card-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
+      .unit-info { display: flex; flex-direction: column; gap: 4px; }
+      .unit-plate { font-size: 1.3rem; font-weight: 900; color: var(--text-white); display: flex; align-items: center; gap: 8px; }
+      .semi-plate { font-size: 0.85rem; color: var(--orange); font-weight: 700; }
+      .ot-display { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; }
+      .ot-label { color: var(--text-muted); font-weight: 600; }
+      .ot-value { color: var(--blue); font-weight: 800; }
+      .time-badge { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+      .time-value { font-size: 0.9rem; font-weight: 700; color: var(--text-muted); }
+      .time-value.urgent { color: var(--red); }
+      .wait-mins { font-size: 0.7rem; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; }
+      .wait-mins.urgent { background: rgba(218,54,51,0.2); color: var(--red); }
       
-      @keyframes slideIn { 
-        from { opacity: 0; transform: translateX(20px); } 
-        to { opacity: 1; transform: translateX(0); } 
-      }
-      .detail-animate { animation: slideIn 0.25s ease-out; }
+      .badges-row { display: flex; gap: 6px; padding: 8px 16px; background: rgba(0,0,0,0.2); }
+      .badge { font-size: 0.65rem; font-weight: 800; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; }
+      .badge-brand { background: rgba(255,255,255,0.1); color: var(--text); border: 1px solid var(--border); }
       
-      @keyframes pulse-ring {
-        0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-        70% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-      }
+      .card-body { padding: 12px 16px; flex-grow: 1; }
+      .mechanic-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+      .mechanic-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; }
+      .mechanic-name { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+      
+      /* ITEMS LIST (Gestalt: Proximidad) */
+      .item-list { display: flex; flex-direction: column; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; }
+      .item-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+      .item-row:last-child { border-bottom: none; }
+      .item-primary { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+      .item-name { font-weight: 700; color: var(--text-white); font-size: 0.9rem; line-height: 1.3; }
+      .item-qty { background: var(--green); color: #fff; font-size: 0.75rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; min-width: 32px; text-align: center; }
+      .item-secondary { display: flex; justify-content: space-between; align-items: center; }
+      .item-id { font-size: 0.85rem; color: #a5b4fc; font-family: monospace; font-weight: 700; background: rgba(165, 180, 252, 0.1); padding: 2px 6px; border-radius: 4px; }
+      .item-loc { font-size: 0.75rem; color: #58a6ff; background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.3); border-radius: 4px; padding: 4px 8px; font-weight: 800; }
+      .hidden-items { display: none; } .hidden-items.show { display: block; }
+      .expand-btn { width: 100%; padding: 10px; background: rgba(56, 139, 253, 0.1); border: none; color: #58a6ff; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; }
 
-      /* Stat Pills */
-      .stat-pill { 
-        display: inline-flex; 
-        align-items: center; 
-        gap: 6px; 
-        padding: 4px 10px; 
-        border-radius: 6px; 
-        font-size: 11px; 
-        font-weight: 600; 
+      /* === DASHBOARD ADMIN PANEL (Sutil y de Control) === */
+      .admin-panel {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 16px; background: rgba(0, 0, 0, 0.3); border-top: 1px solid var(--border);
       }
       
-      /* Card Grid */
-      .card-grid { 
-        display: grid; 
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
-        gap: 12px; 
+      .color-picker { display: flex; gap: 8px; }
+      .swatch {
+        width: 20px; height: 20px; border-radius: 50%;
+        cursor: pointer; border: 2px solid transparent;
+        transition: transform 0.2s, box-shadow 0.2s;
       }
+      .swatch:hover { transform: scale(1.2); }
+      
+      /* Colores disponibles */
+      .s-default { background: var(--border); }
+      .s-red { background: var(--red); }
+      .s-green { background: var(--green); }
+      .s-blue { background: var(--blue); }
+      .s-orange { background: var(--orange); }
 
-      /* === BADGE SYSTEM === */
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 9px;
-        font-weight: 700;
+      /* Animación sutil (El administrador ve que "hizo algo" sin que tiemble su pantalla) */
+      .btn-ping {
+        background: transparent; color: var(--red);
+        border: 1px solid rgba(218, 54, 51, 0.4);
+        padding: 6px 16px; border-radius: 6px;
+        font-size: 0.75rem; font-weight: 800;
+        cursor: pointer; transition: all 0.3s;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        opacity: 0.9;
       }
-      
-      /* Brand Badges */
-      .badge-brand { background: var(--badge-default); color: #fff; }
-      .badge-brand[data-brand="IVECO"] { background: var(--badge-iveco); }
-      .badge-brand[data-brand="SCANIA"] { background: var(--badge-scania); }
-      .badge-brand[data-brand="VOLVO"] { background: var(--badge-volvo); }
-      .badge-brand[data-brand="MERCEDES"] { background: var(--badge-mercedes); }
-      .badge-brand[data-brand="VOLKSWAGEN"] { background: var(--badge-volkswagen); }
-      .badge-brand[data-brand="FORD"] { background: var(--badge-ford); }
-      .badge-brand[data-brand="RENAULT"] { background: var(--badge-renault); color: #18181b; }
-      
-      /* Product Badges */
-      .badge-product { background: var(--badge-product-default); color: #fff; }
-      .badge-product[data-product="LIVIANO"] { background: var(--badge-liviano); }
-      .badge-product[data-product="PESADO"] { background: var(--badge-pesado); }
-      .badge-product[data-product="SEMI"] { background: var(--badge-semi); }
-      
-      /* Zone Badges */
-      .badge-zone { background: var(--badge-zone-default); color: #fff; }
-      .badge-zone[data-zone="1"] { background: var(--badge-zone-1); }
-      .badge-zone[data-zone="2"] { background: var(--badge-zone-2); }
-      .badge-zone[data-zone="3"] { background: var(--badge-zone-3); }
-
-      /* === RATING SYSTEM - Enhanced === */
-      .rating-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 56px;
-        height: 56px;
-        border-radius: 16px;
-        border: 2px solid var(--border);
-        background: var(--panel);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        position: relative;
-      }
-      
-      .rating-btn .rating-icon {
-        width: 24px;
-        height: 24px;
-      }
-      
-      .rating-btn:hover {
-        transform: scale(1.08);
-        border-color: var(--border-hover);
-      }
-      
-      .rating-btn.positive:hover,
-      .rating-btn.positive.active {
-        background: rgba(34, 197, 94, 0.15);
-        border-color: var(--rating-positive);
-        color: var(--rating-positive);
-        box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
-      }
-      
-      .rating-btn.negative:hover,
-      .rating-btn.negative.active {
-        background: rgba(239, 68, 68, 0.15);
-        border-color: var(--rating-negative);
-        color: var(--rating-negative);
-        box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
-      }
-      
-      .rating-btn:focus {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-      
-      /* Rating score display */
-      .rating-score {
-        text-align: center;
-        padding: 0 24px;
-      }
-      
-      .rating-score-value {
-        font-size: 32px;
-        font-weight: 800;
-        line-height: 1;
-        color: var(--text-bright);
-      }
-      
-      .rating-score-label {
-        font-size: 11px;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 4px;
+      .btn-ping:hover { background: rgba(218, 54, 51, 0.15); border-color: var(--red); }
+      .btn-ping.success {
+        background: var(--green); color: white; border-color: var(--green);
+        box-shadow: 0 0 10px rgba(35, 134, 54, 0.5);
       }
 
-      /* === TIMELINE SYSTEM (WCAG Compliant) === */
-      .timeline-container {
-        position: relative;
-        padding-left: 24px;
+      .loading { grid-column: 1 / -1; text-align: center; padding: 60px; color: var(--text-muted); }
+
+      /* === TOGGLE BUTTON === */
+      .btn-toggle {
+        background: transparent; color: var(--text-muted);
+        border: 1px solid var(--border); border-radius: 6px;
+        padding: 6px 12px; font-size: 0.8rem; font-weight: 600;
+        cursor: pointer; display: flex; align-items: center; gap: 6px;
+        transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+        font-family: inherit;
       }
-      
-      .timeline-track {
-        position: absolute;
-        left: 11px;
-        top: 12px;
-        bottom: 12px;
-        width: 4px;
-        background: #27272a;
-        border-radius: 2px;
-        overflow: hidden;
-      }
-      
-      .timeline-progress {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        background: linear-gradient(180deg, #22c55e 0%, #3b82f6 100%);
-        border-radius: 2px;
-        transition: height 0.5s ease;
-      }
-      
-      .timeline-step {
-        position: relative;
-        display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        padding: 12px 0;
-        min-height: 56px;
-      }
-      
-      .timeline-node {
-        position: relative;
-        z-index: 2;
-        flex-shrink: 0;
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background: #18181b;
-        border: 3px solid #3f3f46;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.3s ease;
-      }
-      
-      .timeline-node.completed {
-        background: #22c55e;
-        border-color: #22c55e;
-      }
-      
-      .timeline-node.active {
-        background: #3b82f6;
-        border-color: #3b82f6;
-        animation: pulse-ring 2s infinite;
-      }
-      
-      .timeline-node.pending {
-        background: #18181b;
-        border-color: #52525b;
-      }
-      
-      .timeline-node-inner {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: currentColor;
-      }
-      
-      .timeline-content {
-        flex: 1;
-        padding-top: 2px;
-      }
-      
-      .timeline-label {
-        font-size: 12px;
-        font-weight: 600;
-        margin-bottom: 2px;
-      }
-      
-      .timeline-time {
-        font-family: 'Roboto Mono', monospace;
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-      
-      .timeline-duration {
-        font-size: 10px;
-        color: #3b82f6;
-        margin-top: 2px;
+      .btn-toggle:hover { color: var(--text-white); border-color: var(--text-muted); }
+      .btn-toggle.active { 
+        background: rgba(56, 139, 253, 0.1); 
+        color: #58a6ff; 
+        border-color: rgba(56, 139, 253, 0.3); 
       }
 
-      /* === MODAL SYSTEM === */
-      .modal-overlay {
-        position: fixed; 
-        inset: 0; 
-        z-index: 50;
-        background: rgba(0,0,0,0.8); 
-        backdrop-filter: blur(4px);
-        display: flex; 
-        align-items: center; 
-        justify-content: center;
-        opacity: 0; 
-        pointer-events: none; 
-        transition: opacity 0.3s ease;
+      /* === MINIMAL MODE (Prägnanz) === */
+      /* Oculta la fila secundaria de golpe y reajusta la proximidad espacial */
+      body.minimal-mode .item-secondary { 
+        display: none !important; 
       }
-      .modal-overlay.active { opacity: 1; pointer-events: all; }
-      
-      .modal-window {
-        background: #18181b; 
-        border: 1px solid #27272a;
-        border-radius: 16px; 
-        padding: 24px;
-        width: 100%; 
-        max-width: 420px;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        transform: scale(0.95); 
-        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-      .modal-overlay.active .modal-window { transform: scale(1); }
-
-      /* === SMART SHEET (Inbox) === */
-      .smart-sheet-overlay { 
-        position: fixed; 
-        inset: 0; 
-        background: rgba(0,0,0,0.6); 
-        z-index: 100; 
-        opacity: 0; 
-        pointer-events: none; 
-        transition: 0.3s; 
-        backdrop-filter: blur(3px); 
-      }
-      .smart-sheet-overlay.open { opacity: 1; pointer-events: all; }
-      
-      .smart-sheet { 
-        position: fixed; 
-        bottom: -100%; 
-        right: 0; 
-        width: 420px; 
-        height: 85%; 
-        background: #161b22; 
-        z-index: 101; 
-        border-radius: 16px 16px 0 0; 
-        transition: bottom 0.3s; 
-        display: flex; 
-        flex-direction: column; 
-        border: 1px solid #30363d; 
-        border-bottom: none; 
-      }
-      .smart-sheet.open { bottom: 0; }
-      
-      .sheet-header { 
-        padding: 20px; 
-        background: #0d1117; 
-        border-bottom: 1px solid #30363d; 
-        border-radius: 16px 16px 0 0; 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-      }
-      .sheet-content { flex: 1; overflow-y: auto; padding: 16px; }
-      
-      .notif-card { 
-        background: #0d1117; 
-        border-radius: 12px; 
-        padding: 16px; 
-        margin-bottom: 12px; 
-        border-left: 4px solid #3b82f6; 
-      }
-
-      /* === FILTER PANEL === */
-      .filter-section {
-        padding: 12px;
-        border-bottom: 1px solid #27272a;
-      }
-      
-      .filter-label {
-        font-size: 9px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        color: #71717a;
-        margin-bottom: 8px;
-      }
-      
-      .filter-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 10px;
-        font-weight: 600;
-        background: #27272a;
-        color: #a1a1aa;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        border: 1px solid transparent;
-        margin: 2px;
-      }
-      
-      .filter-chip:hover {
-        background: #3f3f46;
-        color: #e4e4e7;
-      }
-      
-      .filter-chip.active {
-        background: #3b82f6;
-        color: #fff;
-        border-color: #3b82f6;
-      }
-      
-      .filter-chip:focus {
-        outline: 2px solid #3b82f6;
-        outline-offset: 2px;
-      }
-      
-      /* Rated indicator - Improved size and positioning */
-      .rated-indicator {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        min-width: 28px;
-        height: 28px;
-        padding: 0 8px;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        font-size: 11px;
-        font-weight: 700;
-        z-index: 5;
-      }
-      
-      .rated-indicator.positive {
-        background: rgba(34, 197, 94, 0.2);
-        color: var(--rating-positive);
-        border: 1px solid rgba(34, 197, 94, 0.3);
-      }
-      
-      .rated-indicator.negative {
-        background: rgba(239, 68, 68, 0.2);
-        color: var(--rating-negative);
-        border: 1px solid rgba(239, 68, 68, 0.3);
-      }
-      
-      .rated-indicator .rating-icon {
-        width: 14px;
-        height: 14px;
-      }
-      
-      .rated-indicator .rating-value {
-        font-family: 'Roboto Mono', monospace;
-        font-size: 11px;
-      }
-      
-      /* Skip Link for Accessibility */
-      .skip-link {
-        position: absolute;
-        top: -40px;
-        left: 0;
-        background: #3b82f6;
-        color: white;
-        padding: 8px 16px;
-        z-index: 1000;
-        transition: top 0.3s;
-      }
-      
-      .skip-link:focus {
-        top: 0;
+      body.minimal-mode .item-row { 
+        gap: 0; 
+        padding: 8px 14px; /* Compacta el margen para que no queden huecos vacíos */
       }
     </style>
-  </head>
-  
-  <body class="flex">
-    <!-- Skip Link for Accessibility -->
-    <a href="#main-content" class="skip-link">Saltar al contenido principal</a>
-
-    <!-- Global Modal -->
-    <div id="global-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-       <div class="modal-window">
-         <div class="flex justify-between items-start mb-4">
-            <h3 id="modal-title" class="text-white font-bold text-lg flex items-center gap-2"></h3>
-            <button onclick="closeModal()" class="text-zinc-500 hover:text-white p-1" aria-label="Cerrar modal">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-         </div>
-         <div id="modal-content" class="text-sm text-zinc-300 mb-6"></div>
-         <div id="modal-actions" class="flex flex-col gap-2"></div>
-       </div>
-    </div>
-
-    <!-- Inbox Smart Sheet -->
-    <div id="smartSheetOverlay" class="smart-sheet-overlay" onclick="closeInbox()"></div>
-    <div id="smartSheet" class="smart-sheet" role="complementary" aria-label="Bandeja de respuestas">
-      <div class="sheet-header">
-        <div class="sheet-title flex items-center gap-2 text-white font-bold">
-          <i data-lucide="inbox" class="w-5 h-5 text-blue-500"></i> 
-          Respuestas 
-          <span id="sheetCount" class="bg-red-500 text-white px-2 rounded-full text-xs">0</span>
+</head>
+<body>
+    <header>
+      <div class="header-top">
+        <div class="header-left">
+          <h1>⚙️ Dashboard Control</h1>
+          <div class="admin-badge">ADMIN</div>
         </div>
-        <button onclick="closeInbox()" class="text-zinc-500 hover:text-white text-xl p-2" aria-label="Cerrar bandeja">×</button>
-      </div>
-      <div id="inboxContent" class="sheet-content"></div>
-    </div>
-
-    <!-- Sidebar: Mechanics Roster + Filters -->
-    <aside class="w-72 bg-zinc-950 border-r border-zinc-800 flex flex-col hidden md:flex h-full shrink-0 z-20">
-      <!-- Header -->
-      <div class="p-4 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
-        <h2 class="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest flex justify-between items-center">
-          Staff Taller 
-          <span class="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded text-[9px]" id="mech-count">0</span>
-        </h2>
-        <div class="relative">
-          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-zinc-500"></i>
-          <input 
-            type="text" 
-            id="roster-search" 
-            placeholder="Buscar mecánico..." 
-            class="w-full bg-zinc-900 border border-zinc-800 rounded-md pl-9 pr-3 py-2 text-xs text-zinc-300 focus:border-blue-500 outline-none transition"
-            onkeyup="renderMechanicRoster()"
-            aria-label="Buscar mecánico"
-          >
-        </div>
-      </div>
-      
-      <!-- Mechanic Roster -->
-      <div id="mechanic-roster" class="flex-1 overflow-y-auto p-2 space-y-1" role="listbox" aria-label="Lista de mecánicos"></div>
-      
-      <!-- Filters Section -->
-      <div class="border-t border-zinc-800 bg-zinc-950">
-        <!-- Time Filter -->
-        <div class="filter-section">
-          <div class="filter-label">Tiempo</div>
-          <div class="flex flex-wrap">
-            <button onclick="setTimeFilter('TODAY', this)" class="filter-chip active" data-filter="time">Hoy</button>
-            <button onclick="setTimeFilter('WEEK', this)" class="filter-chip" data-filter="time">Semana</button>
-            <button onclick="setTimeFilter('MONTH', this)" class="filter-chip" data-filter="time">Mes</button>
-          </div>
-        </div>
-        
-        <!-- Brand Filter -->
-        <div class="filter-section">
-          <div class="filter-label">Marca</div>
-          <div id="brand-filters" class="flex flex-wrap"></div>
-        </div>
-        
-        <!-- Product Filter -->
-        <div class="filter-section">
-          <div class="filter-label">Producto</div>
-          <div id="product-filters" class="flex flex-wrap"></div>
-        </div>
-        
-        <!-- Zone Filter (Mechanic Location) -->
-        <div class="filter-section">
-          <div class="filter-label">Zona/Box</div>
-          <div id="zone-filters" class="flex flex-wrap"></div>
-        </div>
-        
-        <!-- Clear Filters -->
-        <div class="p-3">
-          <button onclick="clearAllFilters()" class="w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 transition">
-            <i data-lucide="x-circle" class="w-3 h-3 inline mr-1"></i> Limpiar filtros
+        <button id="toggleDetailsBtn" class="btn-toggle active" onclick="toggleNoise()">
+            <span id="toggleIcon">👁️</span> <span id="toggleText">Ver Detalles</span>
           </button>
+        <div class="header-right">
+          <div id="clock">--:--</div>
         </div>
       </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col min-w-0">
-      <!-- Header -->
-      <header class="h-14 shrink-0 flex justify-between items-center bg-zinc-900/80 backdrop-blur border-b border-zinc-800 px-4">
-        <div class="flex items-center gap-4">
-          <div class="relative group">
-            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-500 group-focus-within:text-blue-500"></i>
-            <input 
-              type="text" 
-              id="search-input" 
-              placeholder="Buscar unidad, OT, mecánico..." 
-              class="bg-zinc-950 border border-zinc-800 rounded-md pl-9 pr-3 py-2 text-xs w-80 focus:border-blue-500 outline-none transition"
-              onkeyup="applyFilter()"
-              aria-label="Buscar operaciones"
-            >
-          </div>
-          <div class="text-[10px] text-zinc-500">
-            <span id="footer-count" class="bg-zinc-800 px-2 py-1 rounded font-mono">0</span> operaciones
-          </div>
+      <div class="control-bar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" class="search-input" placeholder="Buscar patente, OT o repuesto..." oninput="applyFilters()">
         </div>
-        
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-4 mr-4 text-[10px]">
-            <div class="flex items-center gap-2">
-              <i data-lucide="clock" class="w-3.5 h-3.5 text-zinc-500"></i>
-              <span class="text-zinc-400">Cierre</span>
-              <span class="mono font-bold text-white" id="countdown">--:--:--</span>
-            </div>
-          </div>
-          
-          <button 
-            class="relative p-2 text-zinc-400 hover:text-white transition" 
-            onclick="openInbox()"
-            aria-label="Abrir bandeja de respuestas"
-          >
-            <i data-lucide="inbox" class="w-5 h-5"></i>
-            <span id="bell-badge" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 hidden shadow-lg">0</span>
-          </button>
-          
-          <!-- Theme Toggle -->
-          <div class="theme-toggle">
-            <button class="theme-btn active" data-theme="dark" onclick="setTheme('dark')" title="Modo Oscuro">🌙</button>
-            <button class="theme-btn" data-theme="charcoal" onclick="setTheme('charcoal')" title="Modo Carbón">🌑</button>
-            <button class="theme-btn" data-theme="light" onclick="setTheme('light')" title="Modo Claro">☀️</button>
-          </div>
-          
-          <div class="h-8 w-8 bg-zinc-800 rounded-full flex items-center justify-center border border-zinc-700 text-[10px] font-bold text-zinc-400">AD</div>
-        </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- Main Grid -->
-      <main id="main-content" class="flex-1 flex min-h-0 overflow-hidden">
-        <div id="grid-panel" class="flex-1 flex flex-col bg-zinc-900 overflow-hidden">
-          <div id="index-grid" class="flex-1 overflow-y-auto p-4 card-grid content-start">
-             <div class="col-span-full text-center text-zinc-600 text-xs py-10">
-               <i data-lucide="loader" class="w-6 h-6 animate-spin mx-auto mb-2"></i>
-               Cargando datos en vivo...
-             </div>
-          </div>
-        </div>
-        
-        <!-- Detail Panel -->
-        <div id="detail-wrapper" class="w-0 overflow-hidden transition-all duration-300 border-l border-zinc-800 bg-zinc-950">
-           <div id="detail-panel" class="w-[440px] h-full flex flex-col"></div>
-        </div>
-      </main>
-    </div>
+    <main>
+      <div id="board" class="grid">
+        <div class="loading">Sincronizando...</div>
+      </div>
+    </main>
 
-    <script>
-      // === GLOBAL STATE ===
-      let rawDataset = [], groupedDataset = [], allMechanics = [];
-      let primaryItem = null;
-      let currentTimeFilter = 'TODAY';
-      let selectedMechFilter = 'ALL';
-      let selectedBrandFilter = 'ALL';
-      let selectedProductFilter = 'ALL';
-      let selectedZoneFilter = 'ALL';
-      let dashboardNotifications = [];
-      let notifTimer = null, pollTimer = null;
-      
-      // Unique values for filters
-      let uniqueBrands = new Set();
-      let uniqueProducts = new Set();
-      let uniqueZones = new Set();
+ <script>
+      let allOrders = [];
+      let expandedCards = new Set();
+      let filters = { search: '' };
 
-      window.onload = function() {
-        // Load saved theme
-        const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
-        setTheme(savedTheme, false);
-        
-        startCountdown();
-        lucide.createIcons();
-        fetchLiveData();
-        pollDashboardNotifications();
-        pollTimer = setInterval(fetchLiveData, 8000);
-        notifTimer = setInterval(pollDashboardNotifications, 10000);
-      };
-      
-      // === THEME SYSTEM ===
-      function setTheme(theme, save = true) {
-        if (theme === 'dark') {
-          document.documentElement.removeAttribute('data-theme');
-        } else {
-          document.documentElement.setAttribute('data-theme', theme);
-        }
-        
-        // Update toggle buttons
-        document.querySelectorAll('.theme-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.theme === theme);
-        });
-        
-        if (save) {
-          localStorage.setItem('dashboard-theme', theme);
-        }
+      function initApp() {
+        loadData(); 
+        setInterval(loadData, 5000);
+        setInterval(updateClock, 1000);
       }
+      initApp();
 
-      // === UNIFIED MODAL LOGIC ===
-      function showModal(title, contentHtml, iconName, actionBtnText = null, actionCallback = null) {
-         const modal = document.getElementById('global-modal');
-         const titleEl = document.getElementById('modal-title');
-         const contentEl = document.getElementById('modal-content');
-         const actionsEl = document.getElementById('modal-actions');
-         
-         const iconSvg = `<i data-lucide="${iconName}" class="w-5 h-5 text-blue-500"></i>`;
-         titleEl.innerHTML = `${iconSvg} ${title}`;
-         contentEl.innerHTML = contentHtml;
-         actionsEl.innerHTML = '';
-         
-         if (actionBtnText && actionCallback) {
-             const btn = document.createElement('button');
-             btn.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition text-sm";
-             btn.innerText = actionBtnText;
-             btn.onclick = actionCallback;
-             btn.id = "modal-primary-btn";
-             actionsEl.appendChild(btn);
-         }
-         
-         if (!actionBtnText) {
-             const closeBtn = document.createElement('button');
-             closeBtn.className = "w-full bg-zinc-700 hover:bg-zinc-600 text-white font-medium py-3 rounded-lg transition text-sm";
-             closeBtn.innerText = "Entendido";
-             closeBtn.onclick = closeModal;
-             actionsEl.appendChild(closeBtn);
-         }
-
-         lucide.createIcons();
-         modal.classList.add('active');
-         
-         // Focus trap
-         setTimeout(() => {
-           const firstFocusable = modal.querySelector('button, input, textarea');
-           if (firstFocusable) firstFocusable.focus();
-         }, 100);
-      }
-
-      function closeModal() {
-         document.getElementById('global-modal').classList.remove('active');
-      }
-
-      // === DISPATCH WORKFLOW ===
-      function openDispatchModal() {
-        if(!primaryItem || !primaryItem.opId) {
-          showModal('Error', 'Selecciona una operación válida primero.', 'alert-triangle');
-          return;
-        }
-
-        const currentRating = primaryItem.currentRating || 0;
-        const ratingHtml = currentRating !== 0 
-          ? `<div class="flex items-center gap-2 mb-3 text-xs">
-               <span class="text-zinc-500">Rating actual:</span>
-               <span class="${currentRating > 0 ? 'text-green-500' : 'text-red-500'} font-bold">${currentRating > 0 ? '+' : ''}${currentRating}%</span>
-             </div>`
-          : '';
-
-        const formHtml = `
-          <div class="bg-zinc-900 p-3 rounded-lg border border-zinc-800 mb-4 flex items-center gap-3">
-             <div class="w-10 h-10 rounded-full bg-blue-900/30 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
-               ${(primaryItem.mechName || 'M').substring(0,1).toUpperCase()}
-             </div>
-             <div class="flex-1">
-               <div class="text-white font-semibold text-sm">${primaryItem.mechName}</div>
-               <div class="text-zinc-500 text-[10px]">OT: ${primaryItem.ot} · ${primaryItem.unit}</div>
-             </div>
-          </div>
-          ${ratingHtml}
-          <textarea 
-            id="dispatch-msg-input" 
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-300 outline-none focus:border-blue-500 resize-none h-28" 
-            placeholder="Escribe el mensaje para el mecánico..."
-            aria-label="Mensaje"
-          ></textarea>
-          <div class="mt-3 flex items-center gap-2">
-            <input type="checkbox" id="include-rating-msg" class="w-4 h-4 accent-blue-500">
-            <label for="include-rating-msg" class="text-xs text-zinc-400">Incluir rating en el mensaje</label>
-          </div>
-        `;
-
-        showModal('Enviar Mensaje', formHtml, 'send', 'ENVIAR AHORA', () => {
-             const body = document.getElementById('dispatch-msg-input').value;
-             const includeRating = document.getElementById('include-rating-msg').checked;
-             if(!body.trim()) return;
-             
-             const btn = document.getElementById('modal-primary-btn');
-             btn.disabled = true;
-             btn.innerHTML = `<span class="animate-pulse">Enviando...</span>`;
-             
-             let finalBody = body;
-             if (includeRating && primaryItem.currentRating) {
-               const ratingText = primaryItem.currentRating > 0 ? `👍 +${primaryItem.currentRating}%` : `👎 ${primaryItem.currentRating}%`;
-               finalBody = `${body}\n\n[Rating: ${ratingText}]`;
-             }
-             
-             google.script.run
-                .withSuccessHandler(res => {
-                    closeModal();
-                    if(res.success) showModal('Enviado', 'Mensaje entregado correctamente.', 'check-circle');
-                    else showModal('Error', res.error, 'x-circle');
-                })
-                .sendDispatchCard({ 
-                  targetOpId: primaryItem.opId, 
-                  unitId: primaryItem.unit, 
-                  type: 'REQUEST', 
-                  body: finalBody 
-                });
-        });
-        
-        setTimeout(() => document.getElementById('dispatch-msg-input').focus(), 100);
-      }
-
-      // === RATING SYSTEM ===
-      function rateTransaction(reqId, direction) {
-        const scoreDelta = direction === 'up' ? 1 : -1;
-        const tag = direction === 'up' ? 'Positive' : 'Negative';
-        
-        // Update UI immediately
-        if (primaryItem && primaryItem.reqId === reqId) {
-          primaryItem.currentRating = (primaryItem.currentRating || 0) + scoreDelta;
-          primaryItem.isRated = true;
-          primaryItem.ratingDirection = direction;
-          renderPanel();
-        }
-        
-        // Update card in grid
-        const card = document.getElementById(`card-${reqId}`);
-        if (card) {
-          updateCardRatingIndicator(card, direction);
-        }
-        
-        // Persist to backend
+      function loadData() { 
         google.script.run
-          .withSuccessHandler(res => {
-            if (!res.success) {
-              showModal('Error', 'No se pudo guardar el rating: ' + (res.error || 'Error desconocido'), 'alert-triangle');
-            }
-          })
-          .withFailureHandler(err => {
-            showModal('Error', 'Error de conexión al guardar rating', 'wifi-off');
-          })
-          .rateInteraction(reqId, scoreDelta, tag);
-      }
-      
-      function updateCardRatingIndicator(card, direction) {
-        let indicator = card.querySelector('.rated-indicator');
-        if (!indicator) {
-          indicator = document.createElement('div');
-          indicator.className = 'rated-indicator';
-          card.appendChild(indicator);
-        }
-        
-        indicator.className = `rated-indicator ${direction === 'up' ? 'positive' : 'negative'}`;
-        indicator.innerHTML = direction === 'up' 
-          ? '<i data-lucide="thumbs-up" class="w-3 h-3"></i>'
-          : '<i data-lucide="thumbs-down" class="w-3 h-3"></i>';
-        lucide.createIcons();
+          .withSuccessHandler(onDataReceived)
+          .getPendingOrdersEnriched(); 
       }
 
-      // === DATA HANDLING ===
-      function fetchLiveData() { 
-        google.script.run.withSuccessHandler(diffAndRender).getAnalyticsData(); 
+      function onDataReceived(orders) {
+        allOrders = orders || [];
+        applyFilters();
       }
 
-      function diffAndRender(data) {
-        rawDataset = data.transactions || [];
-        allMechanics = data.mechanics || [];
+      function applyFilters() {
+        const board = document.getElementById('board');
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+        filters.search = searchTerm;
         
-        // Extract unique values for filters
-        uniqueBrands.clear();
-        uniqueProducts.clear();
-        uniqueZones.clear();
-        
-        rawDataset.forEach(tx => {
-          if (tx.brand) uniqueBrands.add(tx.brand.toUpperCase());
-          if (tx.product) uniqueProducts.add(tx.product.toUpperCase());
-        });
-        
-        allMechanics.forEach(m => {
-          if (m.zone) uniqueZones.add(m.zone);
-        });
-        
-        renderFilterChips();
-        renderMechanicRoster(); 
-        applyFilter(); 
-      }
-      
-      function renderFilterChips() {
-        // Brand filters
-        const brandContainer = document.getElementById('brand-filters');
-        let brandHtml = `<button onclick="setBrandFilter('ALL', this)" class="filter-chip ${selectedBrandFilter === 'ALL' ? 'active' : ''}" data-filter="brand">Todas</button>`;
-        uniqueBrands.forEach(brand => {
-          brandHtml += `<button onclick="setBrandFilter('${brand}', this)" class="filter-chip ${selectedBrandFilter === brand ? 'active' : ''}" data-filter="brand">${brand}</button>`;
-        });
-        brandContainer.innerHTML = brandHtml;
-        
-        // Product filters
-        const productContainer = document.getElementById('product-filters');
-        let productHtml = `<button onclick="setProductFilter('ALL', this)" class="filter-chip ${selectedProductFilter === 'ALL' ? 'active' : ''}" data-filter="product">Todos</button>`;
-        uniqueProducts.forEach(product => {
-          productHtml += `<button onclick="setProductFilter('${product}', this)" class="filter-chip ${selectedProductFilter === product ? 'active' : ''}" data-filter="product">${product}</button>`;
-        });
-        productContainer.innerHTML = productHtml;
-        
-        // Zone filters
-        const zoneContainer = document.getElementById('zone-filters');
-        let zoneHtml = `<button onclick="setZoneFilter('ALL', this)" class="filter-chip ${selectedZoneFilter === 'ALL' ? 'active' : ''}" data-filter="zone">Todas</button>`;
-        uniqueZones.forEach(zone => {
-          zoneHtml += `<button onclick="setZoneFilter('${zone}', this)" class="filter-chip ${selectedZoneFilter === zone ? 'active' : ''}" data-filter="zone">${zone}</button>`;
-        });
-        zoneContainer.innerHTML = zoneHtml;
-      }
-
-      function renderList(data) {
-        const container = document.getElementById('index-grid');
-        if(data.length === 0) { 
-          container.innerHTML = `
-            <div class="col-span-full text-center text-zinc-600 text-xs py-16">
-              <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-3 opacity-50"></i>
-              <div>Sin resultados para los filtros actuales</div>
-            </div>
-          `; 
-          lucide.createIcons();
-          return; 
-        }
-        
-        const incomingIds = new Set(data.map(r => r.reqId));
-        
-        data.forEach((row, index) => {
-           const cardId = `card-${row.reqId}`;
-           let div = document.getElementById(cardId);
-           const isPrimary = primaryItem && primaryItem.reqId === row.reqId;
-           
-           if (!div) {
-              div = document.createElement('div');
-              div.id = cardId;
-              div.onclick = () => handleSelection(row);
-              div.style.animationDelay = `${index * 0.03}s`;
-              container.appendChild(div);
-           }
-           
-           const brandBadge = row.brand 
-             ? `<span class="badge badge-brand" data-brand="${row.brand.toUpperCase()}">${row.brand}</span>` 
-             : '';
-           const productBadge = row.product 
-             ? `<span class="badge badge-product" data-product="${row.product.toUpperCase()}">${row.product}</span>` 
-             : '';
-           
-           const ratedClass = row.isRated ? (row.ratingDirection === 'up' || row.currentRating > 0 ? 'positive' : 'negative') : '';
-           const ratingValue = row.currentRating || 0;
-           const ratedIndicator = row.isRated 
-             ? `<div class="rated-indicator ${ratedClass}">
-                  <i data-lucide="${row.ratingDirection === 'up' || row.currentRating > 0 ? 'thumbs-up' : 'thumbs-down'}" class="rating-icon"></i>
-                  <span class="rating-value">${ratingValue > 0 ? '+' : ''}${ratingValue}</span>
-                </div>` 
-             : '';
-           
-           div.className = `tx-card fade-in relative p-4 rounded-xl cursor-pointer bg-zinc-950 ${isPrimary ? 'selected-primary' : ''}`;
-           div.setAttribute('role', 'button');
-           div.setAttribute('tabindex', '0');
-           div.setAttribute('aria-label', `Operación ${row.unit}, OT ${row.ot}, ${row.status}`);
-           
-           div.innerHTML = `
-             ${ratedIndicator}
-             <div class="flex justify-between items-start mb-3">
-               <div class="font-black text-base text-white">${row.unit}</div>
-               <div class="flex items-center gap-1.5">
-                 <span class="w-2 h-2 rounded-full ${getStatusColor(row.status)}"></span>
-                 <span class="text-[9px] font-bold text-zinc-500 uppercase">${row.status}</span>
-               </div>
-             </div>
-             <div class="text-[11px] text-blue-400 font-semibold mb-2 truncate">${row.mechName}</div>
-             <div class="text-[10px] text-zinc-500 mb-3 truncate">${row.item}</div>
-             <div class="flex flex-wrap gap-1.5 mb-3">
-               ${brandBadge}
-               ${productBadge}
-             </div>
-             <div class="flex justify-between items-center text-[10px]">
-               <span class="text-zinc-600 font-mono">OT ${row.ot}</span>
-               <span class="stat-pill bg-amber-500/10 text-amber-500">${row.shopMins}m taller</span>
-             </div>`;
-             
-           // Keyboard navigation
-           div.onkeydown = (e) => {
-             if (e.key === 'Enter' || e.key === ' ') {
-               e.preventDefault();
-               handleSelection(row);
-             }
-           };
-        });
-        
-        // Remove cards no longer in dataset
-        Array.from(container.children).forEach(child => { 
-          if(child.id.startsWith('card-') && !incomingIds.has(child.id.replace('card-',''))) {
-            child.remove();
+        let filtered = allOrders.filter(order => {
+          if (searchTerm) {
+            const matchUnit = (order.unitInfo || '').toLowerCase().includes(searchTerm);
+            const matchOT = String(order.otNumber || '').includes(searchTerm);
+            const matchItem = order.items.some(i => (i.name || '').toLowerCase().includes(searchTerm));
+            if (!matchUnit && !matchOT && !matchItem) return false;
           }
-        });
-        
-        lucide.createIcons();
-      }
-
-      function getStatusColor(s) { 
-        return {
-          'PENDIENTE':'bg-zinc-500',
-          'LISTO':'bg-amber-500',
-          'ENTREGADO':'bg-green-500',
-          'DEVOLUCION':'bg-red-500'
-        }[s] || 'bg-zinc-500'; 
-      }
-      
-      function getStatusTextColor(s) {
-        return {
-          'PENDIENTE':'text-zinc-400',
-          'LISTO':'text-amber-500',
-          'ENTREGADO':'text-green-500',
-          'DEVOLUCION':'text-red-500'
-        }[s] || 'text-zinc-400';
-      }
-
-      function handleSelection(data) {
-         if(primaryItem && primaryItem.reqId === data.reqId) { 
-           primaryItem = null; 
-           closeDetailPanel(); 
-         } else { 
-           primaryItem = data; 
-           renderPanel(); 
-         }
-         applyFilter();
-      }
-
-      function closeDetailPanel() { 
-        document.getElementById('detail-wrapper').style.width = '0'; 
-        primaryItem = null; 
-      }
-
-      function renderPanel() {
-         const wrapper = document.getElementById('detail-wrapper');
-         const panel = document.getElementById('detail-panel');
-         if(!primaryItem) { wrapper.style.width = '0'; return; }
-         wrapper.style.width = '440px';
-         
-         const d = primaryItem;
-         
-         // Calculate timeline progress
-         const steps = [
-           { label: 'Solicitud', time: d.timestamp, status: 'completed' },
-           { label: 'Listo', time: d.readyTime, status: d.readyTime ? 'completed' : (d.status === 'PENDIENTE' ? 'active' : 'pending') },
-           { label: 'Entregado', time: d.deliveredTime, status: d.deliveredTime ? 'completed' : (d.status === 'LISTO' ? 'active' : 'pending') }
-         ];
-         
-         const completedSteps = steps.filter(s => s.status === 'completed').length;
-         const progressPercent = ((completedSteps - 1) / (steps.length - 1)) * 100;
-         
-         // Badges
-         const brandBadge = d.brand 
-           ? `<span class="badge badge-brand" data-brand="${d.brand.toUpperCase()}">${d.brand}</span>` 
-           : '';
-         const productBadge = d.product 
-           ? `<span class="badge badge-product" data-product="${d.product.toUpperCase()}">${d.product}</span>` 
-           : '';
-         
-         // Current rating display
-         const currentRating = d.currentRating || 0;
-         const ratingDisplay = d.isRated 
-           ? `<div class="flex items-center gap-2 text-xs">
-                <span class="text-zinc-500">Rating:</span>
-                <span class="${currentRating > 0 ? 'text-green-500' : 'text-red-500'} font-bold">${currentRating > 0 ? '+' : ''}${currentRating}%</span>
-              </div>`
-           : '';
-         
-         panel.innerHTML = `
-            <div class="detail-animate flex flex-col h-full">
-               <!-- Header -->
-               <div class="p-5 border-b border-zinc-800 bg-zinc-900/50">
-                 <div class="flex justify-between items-start mb-3">
-                   <div>
-                     <h2 class="text-2xl font-black text-white">${d.unit}</h2>
-                     <div class="text-xs text-zinc-500 mt-1">OT ${d.ot}</div>
-                   </div>
-                   <button onclick="closeDetailPanel()" class="p-2 text-zinc-500 hover:text-white transition" aria-label="Cerrar panel">
-                     <i data-lucide="x" class="w-5 h-5"></i>
-                   </button>
-                 </div>
-                 <div class="flex flex-wrap gap-2 mt-3">
-                   ${brandBadge}
-                   ${productBadge}
-                   <span class="badge ${getStatusTextColor(d.status)} bg-zinc-800">${d.status}</span>
-                 </div>
-               </div>
-               
-               <!-- Content -->
-               <div class="flex-1 p-5 space-y-5 overflow-y-auto">
-                 <!-- Mechanic Info -->
-                 <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                   <div class="flex items-center gap-3">
-                     <div class="w-12 h-12 rounded-full bg-blue-900/30 text-blue-400 flex items-center justify-center text-lg font-bold border border-blue-500/30">
-                       ${(d.mechName || 'M').substring(0,1).toUpperCase()}
-                     </div>
-                     <div class="flex-1">
-                       <div class="text-white font-semibold">${d.mechName}</div>
-                       <div class="text-zinc-500 text-xs">ID: ${d.opId}</div>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 <!-- Item Info -->
-                 <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                   <div class="text-[10px] text-zinc-500 uppercase font-bold mb-2">Ítem Solicitado</div>
-                   <div class="text-white text-sm">${d.item}</div>
-                   ${d.notes ? `<div class="text-zinc-500 text-xs mt-2 italic">"${d.notes}"</div>` : ''}
-                 </div>
-                 
-                 <!-- Timeline (WCAG Compliant) -->
-                 <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                    <div class="text-[10px] text-zinc-500 uppercase font-bold mb-4">Progreso</div>
-                    <div class="timeline-container" role="list" aria-label="Línea de tiempo de la operación">
-                       <div class="timeline-track">
-                         <div class="timeline-progress" style="height: ${progressPercent}%"></div>
-                       </div>
-                       ${steps.map((step, i) => {
-                         const prevTime = i > 0 && steps[i-1].time ? new Date(steps[i-1].time) : null;
-                         const currTime = step.time ? new Date(step.time) : null;
-                         const duration = prevTime && currTime ? Math.round((currTime - prevTime) / 60000) : null;
-                         
-                         return `
-                           <div class="timeline-step" role="listitem">
-                             <div class="timeline-node ${step.status}" aria-hidden="true">
-                               ${step.status === 'completed' ? '<i data-lucide="check" class="w-3 h-3 text-white"></i>' : ''}
-                             </div>
-                             <div class="timeline-content">
-                               <div class="timeline-label ${step.status === 'completed' ? 'text-white' : step.status === 'active' ? 'text-blue-400' : 'text-zinc-500'}">
-                                 ${step.label}
-                               </div>
-                               <div class="timeline-time">
-                                 ${step.time ? new Date(step.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '--:--'}
-                               </div>
-                               ${duration !== null ? `<div class="timeline-duration">${duration} min</div>` : ''}
-                             </div>
-                           </div>
-                         `;
-                       }).join('')}
-                    </div>
-                 </div>
-                 
-                 <!-- Rating Section - Enhanced -->
-                 <div class="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
-                    <div class="flex justify-between items-center mb-5">
-                      <div class="text-xs text-zinc-400 uppercase font-bold tracking-wider">Calificar Transacción</div>
-                      ${ratingDisplay}
-                    </div>
-                    <div class="flex items-center justify-center gap-6">
-                      <button 
-                        onclick="rateTransaction('${d.reqId}', 'down')" 
-                        class="rating-btn negative ${d.ratingDirection === 'down' ? 'active' : ''}"
-                        aria-label="Rating negativo, -1%"
-                      >
-                        <i data-lucide="thumbs-down" class="rating-icon"></i>
-                      </button>
-                      <div class="rating-score">
-                        <div class="rating-score-value">${currentRating > 0 ? '+' : ''}${currentRating}%</div>
-                        <div class="rating-score-label">Score</div>
-                      </div>
-                      <button 
-                        onclick="rateTransaction('${d.reqId}', 'up')" 
-                        class="rating-btn positive ${d.ratingDirection === 'up' ? 'active' : ''}"
-                        aria-label="Rating positivo, +1%"
-                      >
-                        <i data-lucide="thumbs-up" class="rating-icon"></i>
-                      </button>
-                    </div>
-                    <p class="text-xs text-zinc-500 text-center mt-4">El rating modifica el score del mecánico en ±1%</p>
-                 </div>
-                 
-                 <!-- Stats -->
-                 <div class="grid grid-cols-2 gap-3">
-                   <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800 text-center">
-                     <div class="text-2xl font-bold text-amber-500">${d.shopMins || 0}</div>
-                     <div class="text-[10px] text-zinc-500 uppercase">Min Taller</div>
-                   </div>
-                   <div class="bg-zinc-900 rounded-xl p-4 border border-zinc-800 text-center">
-                     <div class="text-2xl font-bold text-green-500">${d.mechMins || 0}</div>
-                     <div class="text-[10px] text-zinc-500 uppercase">Min Mecánico</div>
-                   </div>
-                 </div>
-               </div>
-               
-               <!-- Footer Actions -->
-               <div class="p-5 border-t border-zinc-800 bg-zinc-900/50 space-y-2">
-                 <button onclick="openDispatchModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-sm font-bold transition flex justify-center items-center gap-2">
-                   <i data-lucide="send" class="w-4 h-4"></i> ENVIAR MENSAJE
-                 </button>
-               </div>
-            </div>`;
-         lucide.createIcons();
-      }
-
-      // === FILTERS ===
-      function setTimeFilter(f, btn) {
-        currentTimeFilter = f;
-        document.querySelectorAll('[data-filter="time"]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        applyFilter();
-      }
-      
-      function setBrandFilter(f, btn) {
-        selectedBrandFilter = f;
-        document.querySelectorAll('[data-filter="brand"]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        applyFilter();
-      }
-      
-      function setProductFilter(f, btn) {
-        selectedProductFilter = f;
-        document.querySelectorAll('[data-filter="product"]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        applyFilter();
-      }
-      
-      function setZoneFilter(f, btn) {
-        selectedZoneFilter = f;
-        document.querySelectorAll('[data-filter="zone"]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        applyFilter();
-      }
-      
-      function clearAllFilters() {
-        currentTimeFilter = 'TODAY';
-        selectedMechFilter = 'ALL';
-        selectedBrandFilter = 'ALL';
-        selectedProductFilter = 'ALL';
-        selectedZoneFilter = 'ALL';
-        document.getElementById('search-input').value = '';
-        renderFilterChips();
-        renderMechanicRoster();
-        applyFilter();
-      }
-
-      function applyFilter() {
-        const term = document.getElementById('search-input').value.toLowerCase();
-        
-        let filtered = rawDataset.filter(r => {
-          // Mechanic filter
-          if (selectedMechFilter !== 'ALL' && r.mechName !== selectedMechFilter) return false;
-          
-          // Brand filter
-          if (selectedBrandFilter !== 'ALL' && (!r.brand || r.brand.toUpperCase() !== selectedBrandFilter)) return false;
-          
-          // Product filter
-          if (selectedProductFilter !== 'ALL' && (!r.product || r.product.toUpperCase() !== selectedProductFilter)) return false;
-          
-          // Search term
-          if (term) {
-            const searchStr = `${r.unit} ${r.ot} ${r.mechName} ${r.item} ${r.brand || ''} ${r.product || ''}`.toLowerCase();
-            if (!searchStr.includes(term)) return false;
-          }
-          
-          // Time filter would be handled server-side, but we show all here
           return true;
         });
+
+        renderCards(filtered);
+      }
+
+      function toggleExpand(reqId) {
+        expandedCards.has(reqId) ? expandedCards.delete(reqId) : expandedCards.add(reqId);
+        applyFilters(); 
+      }
+
+      function renderCards(orders) {
+        const board = document.getElementById('board');
+        if (!orders || orders.length === 0) {
+          board.innerHTML = `<div class="loading">No hay datos activos.</div>`;
+          return;
+        }
+        board.innerHTML = orders.map(order => renderAdminCard(order)).join('');
+      }
+
+      // === MOTOR DE REDUCCIÓN DE RUIDO VISUAL ===
+      
+      // 1. Inicialización (Diseño de Servicio: Recordar preferencia del usuario)
+      function initMinimalMode() {
+        const isMinimal = localStorage.getItem('dashboardMinimalMode') === 'true';
+        if (isMinimal) {
+          document.body.classList.add('minimal-mode');
+        }
+        updateToggleUI(isMinimal);
+      }
+
+      // 2. Acción de Interfaz
+      function toggleNoise() {
+        const body = document.body;
+        // Alternamos la clase global
+        const isNowMinimal = body.classList.toggle('minimal-mode');
         
-        renderList(filtered);
-        document.getElementById('footer-count').innerText = filtered.length;
+        // Guardamos el estado en el navegador
+        localStorage.setItem('dashboardMinimalMode', isNowMinimal);
+        
+        // Actualizamos el feedback del botón
+        updateToggleUI(isNowMinimal);
       }
 
-      function renderMechanicRoster() {
-         const container = document.getElementById('mechanic-roster');
-         const search = document.getElementById('roster-search').value.toLowerCase();
-         document.getElementById('mech-count').innerText = allMechanics.length;
-         
-         let html = `
-           <div 
-             onclick="selectedMechFilter='ALL';renderMechanicRoster();applyFilter()" 
-             class="mech-card ${selectedMechFilter==='ALL'?'active':''} p-3 rounded-lg cursor-pointer text-xs mb-1 hover:bg-zinc-800 transition"
-             role="option"
-             aria-selected="${selectedMechFilter==='ALL'}"
-             tabindex="0"
-           >
-             <span class="text-zinc-300">Todos los mecánicos</span>
-           </div>
-         `;
-         
-         allMechanics
-           .filter(m => !search || m.name.toLowerCase().includes(search))
-           .forEach(m => {
-              const scoreColor = m.score >= 80 ? 'text-green-500' : m.score >= 50 ? 'text-amber-500' : 'text-red-500';
-              const scoreBar = Math.min(100, Math.max(0, m.score));
-              
-              html += `
-                <div 
-                  onclick="selectedMechFilter='${m.name}';renderMechanicRoster();applyFilter()" 
-                  class="mech-card ${selectedMechFilter===m.name?'active':''} p-3 rounded-lg cursor-pointer mb-1 hover:bg-zinc-800 transition"
-                  role="option"
-                  aria-selected="${selectedMechFilter===m.name}"
-                  tabindex="0"
-                >
-                  <div class="flex justify-between items-center mb-1">
-                    <span class="text-zinc-300 truncate text-xs font-medium" style="max-width: 140px;">${m.name}</span>
-                    <span class="${scoreColor} font-bold text-xs">${m.score}%</span>
-                  </div>
-                  <div class="h-1 bg-zinc-800 rounded-full overflow-hidden">
-                    <div class="h-full ${scoreColor.replace('text-', 'bg-')} transition-all duration-500" style="width: ${scoreBar}%"></div>
-                  </div>
-                </div>
-              `;
-           });
-         container.innerHTML = html;
-      }
+      // 3. Feedback Visual (Ley de Cierre)
+      function updateToggleUI(isMinimal) {
+        const btn = document.getElementById('toggleDetailsBtn');
+        const icon = document.getElementById('toggleIcon');
+        const text = document.getElementById('toggleText');
 
-      // === NOTIFICATIONS ===
-      function pollDashboardNotifications() { 
-        google.script.run.withSuccessHandler(renderInbox).getDashboardNotifications(); 
-      }
-      
-      function renderInbox(notifs) {
-         dashboardNotifications = notifs || [];
-         const count = dashboardNotifications.length;
-         document.getElementById('bell-badge').innerText = count;
-         document.getElementById('bell-badge').classList.toggle('hidden', count === 0);
-         document.getElementById('sheetCount').innerText = count;
-
-         const cont = document.getElementById('inboxContent');
-         if(document.getElementById('smartSheet').classList.contains('open')) {
-            if(count === 0) { 
-              cont.innerHTML = `
-                <div class="text-center text-zinc-600 text-xs mt-20">
-                  <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-3 opacity-50"></i>
-                  <div>No hay respuestas pendientes</div>
-                </div>
-              `; 
-              lucide.createIcons();
-              return; 
-            }
-            cont.innerHTML = notifs.map(n => `
-               <div id="notif-${n.id}" class="notif-card fade-in">
-                 <div class="flex justify-between mb-2 text-[10px] text-zinc-500 font-bold uppercase">
-                   <span>${n.unit}</span>
-                   <span>${n.timeAgo}</span>
-                 </div>
-                 <div class="text-sm text-white font-bold mb-2">${n.mechName}</div>
-                 <div class="text-xs text-zinc-400 bg-zinc-800/50 p-3 rounded-lg mb-2 border-l-2 border-zinc-600">"${n.originalMsg}"</div>
-                 <div class="text-sm text-green-400 font-medium mb-3">
-                   <i data-lucide="corner-down-right" class="w-3 h-3 inline mr-1"></i>
-                   ${n.reply}
-                 </div>
-                 <button onclick="dismissNotification('${n.id}')" class="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition">
-                   MARCAR LEÍDO
-                 </button>
-               </div>`).join('');
-            lucide.createIcons();
-         }
-      }
-
-      function openInbox() { 
-        document.getElementById('smartSheetOverlay').classList.add('open'); 
-        document.getElementById('smartSheet').classList.add('open'); 
-        renderInbox(dashboardNotifications); 
-      }
-      
-      function closeInbox() { 
-        document.getElementById('smartSheetOverlay').classList.remove('open'); 
-        document.getElementById('smartSheet').classList.remove('open'); 
-      }
-      
-      function dismissNotification(id) { 
-        const notifEl = document.getElementById(`notif-${id}`);
-        if (notifEl) {
-          notifEl.style.opacity = '0';
-          notifEl.style.transform = 'translateX(20px)';
-          setTimeout(() => notifEl.remove(), 300);
+        if (isMinimal) {
+          btn.classList.remove('active');
+          icon.textContent = '👁️‍🗨️'; // Feedback de visión compacta
+          text.textContent = 'Mostrar ID/Loc';
+        } else {
+          btn.classList.add('active');
+          icon.textContent = '👁️'; // Feedback de visión expandida
+          text.textContent = 'Ocultar ID/Loc';
         }
-        google.script.run.dismissDashboardNotification(id); 
       }
 
-      function startCountdown() {
-         setInterval(() => {
-           const now = new Date();
-           const closeTime = new Date();
-           closeTime.setHours(18, 0, 0, 0);
-           const diff = closeTime - now;
-           
-           if (diff < 0) {
-             document.getElementById('countdown').innerText = "CERRADO";
-             document.getElementById('countdown').classList.add('text-red-500');
-           } else {
-             const hours = Math.floor(diff / 3600000);
-             const mins = Math.floor((diff % 3600000) / 60000);
-             const secs = Math.floor((diff % 60000) / 1000);
-             document.getElementById('countdown').innerText = 
-               `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-           }
-         }, 1000);
-      }
-      
-      // Keyboard shortcuts
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          if (document.getElementById('global-modal').classList.contains('active')) {
-            closeModal();
-          } else if (document.getElementById('smartSheet').classList.contains('open')) {
-            closeInbox();
-          } else if (primaryItem) {
-            closeDetailPanel();
-          }
+      // Ejecutar la revisión de estado al momento de cargar el script (llámalo dentro de tu initApp)
+      // Agrega 'initMinimalMode();' adentro de la función 'initApp()' que ya tienes.
+
+      function renderAdminCard(o) {
+        const dateObj = new Date(o.timestamp);
+        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const waitMins = Math.floor((Date.now() - dateObj.getTime()) / 60000);
+        const isUrgent = o.status !== 'LISTO' && waitMins >= 15;
+        
+        const hasSemi = o.unitInfo && (o.unitInfo.includes('/') || o.unitInfo.includes('+'));
+        let mainPlate = o.unitInfo || ''; let semiPlate = '';
+        if (hasSemi) { const p = o.unitInfo.split(/[\/+]/); mainPlate = p[0].trim(); semiPlate = p[1] ? p[1].trim() : ''; }
+        
+        // El color se leerá de las variables inyectadas por el backend (Paso 2)
+        const activeColor = o.uiColor || 'default';
+        const borderColor = activeColor === 'default' ? 'var(--border)' : `var(--${activeColor})`;
+        
+        const initials = (o.opInfo || 'NN').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+        // ITEMS HTML
+        const MAX_VISIBLE = 3;
+        const isExpanded = expandedCards.has(o.reqId);
+        let itemsHtml = '<div class="item-list">';
+        o.items.forEach((item, idx) => {
+          if (idx === MAX_VISIBLE && !isExpanded) itemsHtml += `<div class="hidden-items" id="hidden-${o.reqId}">`;
+          itemsHtml += `
+            <div class="item-row">
+              <div class="item-primary"><span class="item-name">${item.name}</span><span class="item-qty">x${item.qty}</span></div>
+              <div class="item-secondary"><span class="item-id">#${item.id || 'S/D'}</span><span class="item-loc">📍 ${item.loc || 'S/D'}</span></div>
+            </div>`;
+        });
+        if (o.items.length > MAX_VISIBLE) {
+          if (!isExpanded) itemsHtml += '</div>';
+          const rem = o.items.length - MAX_VISIBLE;
+          itemsHtml += `<button class="expand-btn" onclick="toggleExpand('${o.reqId}')">${isExpanded ? '▲ Ver menos' : `▼ Ver ${rem} más`}</button>`;
         }
-      });
+        itemsHtml += '</div>';
+
+        return `
+          <div class="card" id="card-${o.reqId}" style="border-left-color: ${borderColor};">
+            <div class="card-header">
+              <div class="unit-info">
+                <div class="unit-plate">${mainPlate} ${semiPlate ? `<span class="semi-plate">/ ${semiPlate}</span>` : ''}</div>
+                <div class="ot-display">OT <span class="ot-value">${o.otNumber || '--'}</span></div>
+              </div>
+              <div class="time-badge">
+                <span class="time-value ${isUrgent ? 'urgent' : ''}">${timeStr} ${isUrgent ? '⚠️' : ''}</span>
+                <span class="wait-mins ${isUrgent ? 'urgent' : ''}">${waitMins} min</span>
+              </div>
+            </div>
+            
+            <div class="card-body">
+              <div class="mechanic-row"><div class="mechanic-avatar">${initials}</div><span class="mechanic-name">${o.opInfo || 'Sin asignar'}</span></div>
+              ${itemsHtml}
+            </div>
+            
+            <!-- PANEL ADMINISTRADOR: Cambia colores y envía Pings silenciosamente -->
+            <div class="admin-panel">
+              <div class="color-picker">
+                <div class="swatch s-default" onclick="sendSignal('${o.reqId}', 'color', 'default')"></div>
+                <div class="swatch s-red" onclick="sendSignal('${o.reqId}', 'color', 'red')"></div>
+                <div class="swatch s-orange" onclick="sendSignal('${o.reqId}', 'color', 'orange')"></div>
+                <div class="swatch s-green" onclick="sendSignal('${o.reqId}', 'color', 'green')"></div>
+              </div>
+            <button id="btn-ping-${o.reqId}" class="btn-ping" onclick="sendSignal('${o.reqId}', 'ping', Date.now())">🔔 Ping</button>            </div>
+          </div>`;
+      }
+
+      // === COMUNICACIÓN CON EL BACKEND ===
+      function sendSignal(reqId, type, value) {
+        if (type === 'ping') {
+          const btn = document.getElementById(`btn-ping-${reqId}`);
+          btn.textContent = "✓ Enviado";
+          btn.classList.add('success');
+          setTimeout(() => { btn.textContent = "🔔 Ping"; btn.classList.remove('success'); }, 2000); // Feedback visual sutil (Gestalt)
+        }
+        
+        // Enviamos la orden al servidor para que Pañol la lea
+        google.script.run.setUISignal(reqId, type, value);
+      }
+
+      function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
     </script>
-  </body>
+</body>
 </html>
