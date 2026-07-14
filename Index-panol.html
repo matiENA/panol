@@ -647,26 +647,26 @@
     </main>
 
  <script>
+
       // === GLOBAL STATE ===
       let allOrders = [];
       let expandedCards = new Set();
-      let panolStaffList = []; // Lista de operarios de pañol
-      let pendingSelections = {}; // NUEVO: Memoria de selecciones { reqId: opId }
-      let filters = {
-        status: 'ALL',
-        product: 'ALL',
-        search: ''
-      };
+      let panolStaffList = []; 
+      let pendingSelections = {}; 
+      let filters = { status: 'ALL', product: 'ALL', search: '' };
+      
+      // Variable global para el reloj, inicializada vacía.
+      let pollingInterval; 
+      let isInteracting = false;
 
       // === INIT ===
       function initApp() {
-        // 1. Cargamos primero el staff de pañol.
         google.script.run
           .withSuccessHandler(staff => {
             panolStaffList = staff;
-            loadData(); // Iniciamos la carga de pedidos
-            setInterval(loadData, 5000);
-            setInterval(updateClock, 1000);
+            loadData(); // Primera carga inmediata
+            resumePolling(); // Iniciamos el ciclo de forma controlada
+            setInterval(updateClock, 1000); // El reloj visual no afecta el DOM principal
           })
           .withFailureHandler(err => console.error("Error al cargar staff:", err))
           .getPanolStaff();
@@ -674,6 +674,7 @@
 
       // Arrancar el sistema
       initApp();
+
 
       // === DATA FETCHING ===
       function loadData() { 
@@ -849,6 +850,8 @@
 
 // === FOOTER & POKA-YOKE ===
         
+// === FOOTER & POKA-YOKE (Con Control de Foco) ===
+        
         // 1. Verificamos si este pedido ya tiene una selección guardada en memoria
         const savedOpId = pendingSelections[o.reqId];
         const defaultSelected = !savedOpId ? 'selected' : '';
@@ -859,11 +862,15 @@
           return `<option value="${s.id}" ${isSelected}>${s.name}</option>`;
         }).join('');
 
-        // 3. Añadimos el onchange para actualizar la memoria en tiempo real
+        // 3. Cadena HTML correcta (envuelta en backticks)
         const footerHtml = isReady
           ? `<div class="status-complete">⚡ LISTO PARA RETIRAR</div>`
           : `<div class="action-group">
-               <select id="panol-op-${o.reqId}" class="panol-select" onchange="pendingSelections['${o.reqId}'] = this.value">
+               <select id="panol-op-${o.reqId}" 
+                       class="panol-select" 
+                       onchange="pendingSelections['${o.reqId}'] = this.value"
+                       onfocus="pausePolling()" 
+                       onblur="resumePolling()">
                  <option value="" disabled ${defaultSelected}>👤 Tu nombre...</option>
                  ${staffOptions}
                </select>
@@ -953,7 +960,7 @@ function markReady(reqId) {
           .markAsReady(reqId, panolOpId); 
       }
 
-      // === UTILITIES ===
+// === UTILITIES & POLLING CONTROL ===
       function updateStats() {
         const pending = allOrders.filter(o => o.status === 'PENDIENTE').length;
         const ready = allOrders.filter(o => o.status === 'LISTO').length;
@@ -965,6 +972,20 @@ function markReady(reqId) {
         document.getElementById('clock').textContent = 
           new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       }
-    </script>
+
+      function pausePolling() {
+        isInteracting = true;
+        clearInterval(pollingInterval);
+        console.log("⏸️ Polling pausado por interacción del usuario."); // Opcional: Feedback para ti como dev
+      }
+
+      function resumePolling() {
+        isInteracting = false;
+        clearInterval(pollingInterval); // Poka-Yoke: Previene la creación de múltiples intervalos paralelos
+        pollingInterval = setInterval(loadData, 5000);
+        console.log("▶️ Polling reanudado.");
+      }
+      
+          </script>
 </body>
 </html>
