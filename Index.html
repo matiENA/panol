@@ -351,7 +351,14 @@
   background-color: #f3f4f6;
   color: var(--blue);
 }
-
+@keyframes modal-shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0) scale(1); }
+        20%, 80% { transform: translate3d(2px, 0, 0) scale(1); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0) scale(1); }
+        40%, 60% { transform: translate3d(4px, 0, 0) scale(1); }
+    }
+    .modal-shake { animation: modal-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+    
   </style>
 </head>
 <body>
@@ -460,35 +467,35 @@
             <hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
 
 <!-- ==========================================
-     NUEVO SELECTOR DEPENDIENTE (RUBRO -> REPUESTO)
+     SELECTOR BIDIRECCIONAL (RUBRO <-> REPUESTO)
      ========================================== -->
 <div class="search-dependency-layout">
   
-  <!-- PASO 1: Selector de Categoría (Permite teclear para filtrar) -->
+  <!-- PASO 1: Selector de Categoría -->
   <div class="search-group" id="category-search-container">
-    <label for="category-select" class="search-label">1. Filtrar por Rubro</label>
+    <label for="category-select" class="search-label">1. Filtrar por Rubro (Opcional)</label>
     <div class="input-wrapper">
       <input 
         type="text" 
         id="category-select" 
-        placeholder="Escribe o selecciona un rubro..." 
+        placeholder="Ej. Filtros, Herramientas..." 
         autocomplete="off"
+        style="transition: background-color 0.3s;"
       />
       <span class="dropdown-arrow">▼</span>
     </div>
     <ul id="category-results" class="autocomplete-results hidden"></ul>
   </div>
 
-  <!-- PASO 2: Selector de Producto (Dependiente) -->
+  <!-- PASO 2: Selector de Producto (Principal) -->
   <div class="search-group" id="function-search-container">
     <label for="itemInput" class="search-label">2. Buscar Repuesto / Herramienta</label>
     <div class="input-wrapper">
       <input 
         type="text" 
         id="itemInput" 
-        placeholder="🔒 Bloqueado: Elige un rubro primero" 
+        placeholder="Escribe el nombre del repuesto..." 
         autocomplete="off"
-        disabled
         required
       />
       <span class="dropdown-arrow">▼</span>
@@ -497,6 +504,7 @@
   </div>
 
 </div>
+
 <hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
 
             <div class="input-group" style="margin-bottom: 5px;">
@@ -986,74 +994,64 @@ function searchByField(val, type) {
           setTimeout(() => el.style.backgroundColor = original || 'white', 600);
       }
 
-function addToCart(e) {
-  // Prevenir envío accidental de formularios si se llama desde un submit
-  if (e && e.preventDefault) e.preventDefault(); 
-  
-  const itemVal = document.getElementById('itemInput').value;
-  const otVal = document.getElementById('otInput').value; 
-  const noteVal = document.getElementById('notesInput').value;
+        function addToCart(e) {
+          if (e && e.preventDefault) e.preventDefault(); 
+          
+          const itemVal = document.getElementById('itemInput').value;
+          const otVal = document.getElementById('otInput').value; 
+          const noteVal = document.getElementById('notesInput').value;
 
-  // Validación de seguridad
-  if (!otVal || otVal.includes("SIN")) return showModal("Falta OT", "La unidad/OT no es válida.", "⚠️");
-  if (!itemVal) return;
+          if (!otVal || otVal.includes("SIN")) return showModal("Falta OT", "La unidad/OT no es válida.", "⚠️");
+          if (!itemVal) return;
 
-  // Lógica de Destino (Tractor vs Semi)
-  const destType = document.getElementById('currentItemDest').value;
-  let finalItemName = itemVal;
-  let destLabel = "TRACTOR"; // Internal/Display
+          const destType = document.getElementById('currentItemDest').value;
+          let finalItemName = itemVal;
+          let destLabel = "TRACTOR"; 
 
-  if (destType === 'SEMI') {
-     const semiPlate = document.getElementById('semiUnitInput').value;
-     // Etiqueta inyectada para el backend sin alterar el esquema
-     finalItemName = `${itemVal} [PARA SEMI: ${semiPlate}]`;
-     destLabel = "SEMI";
-  }
+          if (destType === 'SEMI') {
+            const semiPlate = document.getElementById('semiUnitInput').value;
+            finalItemName = `${itemVal} [PARA SEMI: ${semiPlate}]`;
+            destLabel = "SEMI";
+          }
 
-  // Ingreso a memoria
-  cartItems.push({ 
-      item: finalItemName, // Dato estricto para DB
-      displayItem: itemVal, // Nombre limpio para UI
-      qty: 1, 
-      notes: noteVal,
-      destination: destType 
-  });
-  
-  // =========================================================
-  // UX FEEDBACK & POKA-YOKE RESET (Ley de Prägnanz)
-  // =========================================================
-  
-  // 1. Limpieza de datos temporales
-  document.getElementById('itemInput').value = "";
-  document.getElementById('notesInput').value = "";
-  document.getElementById('notesDetails').removeAttribute('open');
-  
-  // 2. Restauración del Diseño Top-Down (Bloqueo de seguridad)
-  const catSelect = document.getElementById('category-select');
-  const itemInp = document.getElementById('itemInput');
-  
-  if (catSelect) {
-    catSelect.value = ""; // Limpia el rubro
-  }
-  
-  if (itemInp) {
-     itemInp.setAttribute('disabled', 'true');
-     itemInp.disabled = true;
-     itemInp.placeholder = "🔒 Bloqueado: Elige un rubro primero";
-  }
-  
-  // 3. Reset de variables de control del flujo de autocompletado
-  if (typeof isCategoryValid !== 'undefined') isCategoryValid = false;
-  if (typeof isItemValid !== 'undefined') isItemValid = false;
-  if (typeof currentFilteredProducts !== 'undefined') currentFilteredProducts = [];
-  
-  // 4. Restaurar Toggle al valor por defecto (Tractor) para prevenir errores
-  if (typeof setDestination === 'function') setDestination('UNIT');
+          // === DISEÑO DE SERVICIO: DETECCIÓN DE CANJE ===
+          // Buscamos si el ítem seleccionado requiere canje según la DB
+          const foundItem = dbItems.find(i => (i.name || i) === itemVal);
+          const reqCanje = foundItem ? (foundItem.requiereCanje === true || String(foundItem.requiereCanje).toUpperCase() === 'TRUE') : false;
 
-  // 5. Renderizar el estado visual actualizado
-  if (typeof renderCart === 'function') renderCart();
-}
+          cartItems.push({ 
+              item: finalItemName,
+              displayItem: itemVal,
+              qty: 1, 
+              notes: noteVal,
+              destination: destType,
+              requiereCanje: reqCanje // Inyectamos la bandera de seguridad
+          });
+          
+          // Limpieza de datos temporales
+          document.getElementById('itemInput').value = "";
+          document.getElementById('notesInput').value = "";
+          document.getElementById('notesDetails').removeAttribute('open');
+          
+          const catSelect = document.getElementById('category-select');
+          const itemInp = document.getElementById('itemInput');
+          
+         // Dentro de addToCart, en el reseteo de UI:
+          if (catSelect) catSelect.value = ""; 
+          if (itemInp) {
+            // Ya NO deshabilitamos el campo
+            itemInp.disabled = false;
+            itemInp.removeAttribute('disabled');
+            itemInp.placeholder = "Escribe el nombre del repuesto...";
+          }
+          
+          if (typeof isCategoryValid !== 'undefined') isCategoryValid = false;
+          if (typeof isItemValid !== 'undefined') isItemValid = false;
+          if (typeof currentFilteredProducts !== 'undefined') currentFilteredProducts = [];
+          if (typeof setDestination === 'function') setDestination('UNIT');
 
+          if (typeof renderCart === 'function') renderCart();
+        }
       function renderCart() {
         const container = document.getElementById('cartContainer');
         const section = document.getElementById('cartSection');
@@ -1113,66 +1111,220 @@ function addToCart(e) {
         renderCart();
       }
 
-      function submitBatchOrder() {
-        if(document.getElementById('itemInput').value) addToCart({ preventDefault: () => {} });
-        if(cartItems.length === 0) return showModal("Vacío", "Agrega al menos un repuesto.", "⚠️");
+// 1. EL INTERCEPTOR
+function submitBatchOrder() {
+    if(document.getElementById('itemInput').value) addToCart({ preventDefault: () => {} });
+    if(cartItems.length === 0) return showModal("Vacío", "Agrega al menos un repuesto.", "⚠️");
 
-        const btn = document.getElementById('submitBtn');
-        btn.disabled = true; btn.textContent = "ENVIANDO...";
+    // Filtramos cuáles piezas del carrito son de recambio obligatorio
+    const itemsCanje = cartItems.filter(i => i.requiereCanje);
+    
+    if (itemsCanje.length > 0) {
+        promptCanje(itemsCanje); // Frenamos el flujo y exigimos justificación
+    } else {
+        executeSubmit(); // Flujo normal sin fricciones
+    }
+}
 
-        const baseName = document.getElementById('activeMechName').value;
-        const finalName = currentBox ? `${baseName} [Box ${currentBox}]` : baseName;
+// 2. LA INTERFAZ DE FRICCIÓN ADAPTATIVA (Gestalt: Región Común)
+function promptCanje(itemsCanje) {
+    let html = `
+    <div style="text-align:left; font-size:0.85rem; color:#555; margin-bottom:15px; font-weight:600;">
+      Por protocolo, estos repuestos requieren la devolución de la pieza dañada a Pañol.
+    </div>
+    <div id="canjeErrors" style="color:var(--danger); font-size:0.8rem; margin-bottom:10px; font-weight:800; display:none;">
+      ⚠️ Justifica las piezas faltantes.
+    </div>`;
 
-        let finalUnit = document.getElementById('unitInput').value;
-        let finalOt = document.getElementById('otInput').value;
+    itemsCanje.forEach((item, idx) => {
+        const safeId = `canje_${idx}`;
+        const qty = parseInt(item.qty, 10);
+
+        html += `
+          <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid var(--orange); padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align:left;">
+            <div style="font-weight: 800; color: var(--dark); margin-bottom: 8px; font-size:0.9rem;">
+              🔸 ${item.displayItem} (Cant: ${qty})
+            </div>`;
         
-        const semiUnit = document.getElementById('semiUnitInput').value.trim();
-        const semiOt = document.getElementById('semiOtInput').value.trim();
-
-        // Concatenate Unit info for the main header of the request
-        if (semiUnit || semiOt) {
-             finalUnit = `${finalUnit} + [${semiUnit || '?'}]`;
-             finalOt = `${finalOt} + [${semiOt || '?'}]`;
+        // DISEÑO DE SERVICIO: Adaptación de UI según Cantidad
+        if (qty === 1) {
+            html += `
+            <div style="display: flex; gap: 10px; margin-bottom:5px;">
+              <label style="flex: 1; cursor: pointer; display:flex; align-items:center; gap:6px;">
+                <input type="radio" name="${safeId}" value="OK" onchange="toggleMotivo('${safeId}', 1)" checked>
+                <span style="font-size: 0.85rem; color:var(--dark); font-weight:700;">Lo tengo</span>
+              </label>
+              <label style="flex: 1; cursor: pointer; display:flex; align-items:center; gap:6px;">
+                <input type="radio" name="${safeId}" value="FALTA" onchange="toggleMotivo('${safeId}', 1)">
+                <span style="font-size: 0.85rem; color:var(--dark); font-weight:700;">No lo tengo</span>
+              </label>
+            </div>`;
+        } else {
+            // Dropdown de cantidad (Poka-Yoke: no permite más del máximo)
+            let optionsHtml = '';
+            for(let i = qty; i >= 0; i--) {
+                optionsHtml += `<option value="${i}">${i}</option>`;
+            }
+            html += `
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom:5px;">
+              <label style="font-size: 0.85rem; color:var(--dark); font-weight:700;">¿Cuántas entregas?</label>
+              <select id="select_${safeId}" style="padding:6px 12px; border-radius:6px; border:2px solid var(--border); font-weight:800; outline:none; background:white; color:var(--blue);" onchange="toggleMotivo('${safeId}', ${qty})">
+                ${optionsHtml}
+              </select>
+            </div>`;
         }
+        
+        html += `
+            <input type="text" id="motivo_${safeId}" placeholder="¿Por qué no entregas todo?" style="display: none; width: 100%; border: 2px solid #e0e0e0; padding: 10px; border-radius: 6px; font-size: 0.85rem; outline:none; box-sizing:border-box; margin-top:8px;">
+          </div>
+        `;
+    });
 
-        // Prepare clean items list for backend (removes display-only properties)
-        const cleanItems = cartItems.map(i => ({
-            item: i.item,
-            qty: i.qty,
-            notes: i.notes
-        }));
+    document.getElementById('modalTitle').innerText = "♻️ Canje Obligatorio";
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('modalIcon').innerText = "📦";
+    
+    const btnCancel = document.getElementById('modalBtnCancel');
+    const btnConfirm = document.getElementById('modalBtnConfirm');
+    
+    btnCancel.style.display = "block";
+    btnConfirm.innerText = "CONFIRMAR PEDIDO";
+    
+    const newConfirm = btnConfirm.cloneNode(true);
+    btnConfirm.parentNode.replaceChild(newConfirm, btnConfirm);
+    
+    newConfirm.onclick = () => {
+        let allValid = true;
+        
+        itemsCanje.forEach((item, idx) => {
+            const safeId = `canje_${idx}`;
+            const qty = parseInt(item.qty, 10);
+            let returnedCount = 0;
 
-        const payload = {
-          opId: document.getElementById('activeOpId').value,
-          mechanicName: finalName,
-          otNumber: finalOt, 
-          unitId: finalUnit, 
-          items: cleanItems
-        };
+            // 1. Extraemos cuántos devuelve realmente
+            if (qty === 1) {
+                const radioVal = document.querySelector(`input[name="${safeId}"]:checked`).value;
+                returnedCount = (radioVal === 'OK') ? 1 : 0;
+            } else {
+                returnedCount = parseInt(document.getElementById(`select_${safeId}`).value, 10);
+            }
 
-        google.script.run.withSuccessHandler((res) => {
-              btn.disabled = false;
-              if(res.success) {
-                showModal("Pedido Enviado", "Tu pedido fue registrado.", "✅");
-                cartItems = []; renderCart();
-                document.getElementById('unitInput').value = "";
-                document.getElementById('otInput').value = "";
-                document.getElementById('semiUnitInput').value = "";
-                document.getElementById('semiOtInput').value = "";
-                
-                document.getElementById('semiDetails').removeAttribute('open');
-                document.getElementById('notesDetails').removeAttribute('open'); 
-                
-                // Hide destination toggle on reset
-                updateDestToggle(null, null);
+            // 2. Procesamos el estado
+            if (returnedCount === qty) {
+                item.canjeStatus = 'OK';
+            } else {
+                const inputEl = document.getElementById(`motivo_${safeId}`);
+                const reason = inputEl.value.trim();
+                const missingCount = qty - returnedCount;
 
-                switchTab('list');
-              } else {
-                showModal("Error", res.error, "⛔");
-              }
-          }).submitBatchRequest(payload);
-      }
+                if (!reason) {
+                    allValid = false;
+                    inputEl.style.borderColor = 'var(--danger)';
+                } else {
+                    // Formateamos el string mixto para no romper la columna Q ni el Dashboard
+                    if (returnedCount === 0) {
+                        item.canjeStatus = `FALTA: ${reason}`;
+                    } else {
+                        item.canjeStatus = `FALTA PARCIAL (${returnedCount} entregada/s): ${reason}`;
+                    }
+                }
+            }
+        });
 
+        if (!allValid) {
+            document.getElementById('canjeErrors').style.display = 'block';
+            const modalWin = document.querySelector('.modal-window');
+            modalWin.classList.remove('modal-shake');
+            void modalWin.offsetWidth;
+            modalWin.classList.add('modal-shake');
+        } else {
+            closeModal();
+            executeSubmit();
+        }
+    };
+    
+    document.getElementById('customModal').classList.add('open');
+}
+
+// Helper Dinámico Adaptativo
+function toggleMotivo(safeId, maxQty) {
+    const inputEl = document.getElementById(`motivo_${safeId}`);
+    let isMissing = false;
+    let missingCount = 1;
+
+    if (maxQty === 1) {
+        const radioVal = document.querySelector(`input[name="${safeId}"]:checked`).value;
+        isMissing = (radioVal === 'FALTA');
+    } else {
+        const selectVal = parseInt(document.getElementById(`select_${safeId}`).value, 10);
+        isMissing = (selectVal < maxQty);
+        missingCount = maxQty - selectVal;
+    }
+
+    if (isMissing) {
+        inputEl.style.display = 'block';
+        // UX: El placeholder cambia dinámicamente según cuántas falten
+        inputEl.placeholder = maxQty > 1 ? `Motivo de las ${missingCount} faltantes...` : "¿Por qué no la tienes?";
+        inputEl.focus();
+    } else {
+        inputEl.style.display = 'none';
+        inputEl.style.borderColor = '#e0e0e0';
+    }
+}
+
+
+// 3. EL EJECUTOR (Envío al Backend)
+function executeSubmit() {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.textContent = "ENVIANDO...";
+
+    const baseName = document.getElementById('activeMechName').value;
+    const finalName = currentBox ? `${baseName} [Box ${currentBox}]` : baseName;
+
+    let finalUnit = document.getElementById('unitInput').value;
+    let finalOt = document.getElementById('otInput').value;
+    const semiUnit = document.getElementById('semiUnitInput').value.trim();
+    const semiOt = document.getElementById('semiOtInput').value.trim();
+
+    if (semiUnit || semiOt) {
+         finalUnit = `${finalUnit} + [${semiUnit || '?'}]`;
+         finalOt = `${finalOt} + [${semiOt || '?'}]`;
+    }
+
+    const cleanItems = cartItems.map(i => ({
+        item: i.item,
+        qty: i.qty,
+        notes: i.notes,
+        canjeStatus: i.canjeStatus || null // <-- MANDAMOS EL ESTADO A LA BASE DE DATOS
+    }));
+
+    const payload = {
+      opId: document.getElementById('activeOpId').value,
+      mechanicName: finalName,
+      otNumber: finalOt, 
+      unitId: finalUnit, 
+      items: cleanItems
+    };
+
+    google.script.run.withSuccessHandler((res) => {
+          btn.disabled = false;
+          if(res.success) {
+            showModal("Pedido Enviado", "Tu pedido fue registrado.", "✅");
+            cartItems = []; renderCart();
+            document.getElementById('unitInput').value = "";
+            document.getElementById('otInput').value = "";
+            document.getElementById('semiUnitInput').value = "";
+            document.getElementById('semiOtInput').value = "";
+            document.getElementById('semiDetails').removeAttribute('open');
+            document.getElementById('notesDetails').removeAttribute('open'); 
+            
+            updateDestToggle(null, null);
+            switchTab('list');
+          } else {
+            showModal("Error", res.error, "⛔");
+          }
+      }).submitBatchRequest(payload);
+}
       function switchTab(view) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-btn')[view === 'form' ? 0 : 1].classList.add('active');
@@ -1367,7 +1519,7 @@ function tryReturn(reqId) {
   });
 }
 // ===========================================
-// SELECTORES DEPENDIENTES (COMBO-BOX ESTRICTO)
+// SELECTORES BIDIRECCIONALES Y GLOBALES
 // ===========================================
 const categorySelect = document.getElementById('category-select');
 const categoryResults = document.getElementById('category-results');
@@ -1378,30 +1530,26 @@ let currentFilteredProducts = [];
 let isCategoryValid = false;
 let isItemValid = false;
 
-// Variables extraídas de dbItems (Asegúrate de que dbItems esté cargado)
 const getUniqueCategories = () => [...new Set(dbItems.map(item => item.category || "GENERAL"))].sort();
 
-// --- PASO 1: LÓGICA DE CATEGORÍAS ---
-
-// Mostrar opciones al hacer clic o enfocar
-categorySelect.addEventListener('focus', () => renderCategories(""));
-categorySelect.addEventListener('click', () => renderCategories(""));
-
-// Filtrar opciones al teclear (Delimitar)
+// --- LÓGICA DE CATEGORÍAS (De Arriba hacia Abajo) ---
+categorySelect.addEventListener('focus', () => renderCategories(categorySelect.value.toLowerCase().trim()));
+categorySelect.addEventListener('click', () => renderCategories(categorySelect.value.toLowerCase().trim()));
 categorySelect.addEventListener('input', (e) => {
-  isCategoryValid = false; // Invalida hasta que seleccione de la lista
+  isCategoryValid = false;
   renderCategories(e.target.value.toLowerCase().trim());
 });
 
 function renderCategories(query) {
   categoryResults.innerHTML = '';
   const categories = getUniqueCategories();
+  
+  // Filtro SIN LÍMITES
   const matches = categories.filter(cat => cat.toLowerCase().includes(query));
 
   if (matches.length > 0) {
     matches.forEach(cat => {
       const li = document.createElement('li');
-      // Resaltar coincidencia (Ley de Similitud Gestalt)
       const regex = new RegExp(`(${query})`, "gi");
       li.innerHTML = query ? cat.replace(regex, "<strong style='color: var(--blue);'>$1</strong>") : cat;
       
@@ -1410,13 +1558,10 @@ function renderCategories(query) {
         isCategoryValid = true;
         categoryResults.classList.add('hidden');
         
-        // Delimitar productos
+        // Acotamos los productos a esta categoría
         currentFilteredProducts = dbItems.filter(item => (item.category || "GENERAL") === cat);
         
-        // UX FEEDBACK: DESBLOQUEO GARANTIZADO DEL PASO 2
-        itemInput.removeAttribute('disabled');
-        itemInput.disabled = false;
-        itemInput.placeholder = `Escribe o elige repuesto de "${cat}"...`;
+        // UX: Foco automático al paso 2
         itemInput.value = ''; 
         isItemValid = false;
         itemInput.focus();
@@ -1429,39 +1574,60 @@ function renderCategories(query) {
   }
 }
 
-// --- PASO 2: LÓGICA DE REPUESTOS ---
-
-// Mostrar opciones al enfocar o hacer clic
-itemInput.addEventListener('focus', () => renderProducts(""));
-itemInput.addEventListener('click', () => renderProducts(""));
-
-// Filtrar opciones al teclear
+// --- LÓGICA DE REPUESTOS (Bidireccional / De Abajo hacia Arriba) ---
+itemInput.addEventListener('focus', () => renderProducts(itemInput.value.toLowerCase().trim()));
+itemInput.addEventListener('click', () => renderProducts(itemInput.value.toLowerCase().trim()));
 itemInput.addEventListener('input', (e) => {
   isItemValid = false;
   renderProducts(e.target.value.toLowerCase().trim());
 });
 
 function renderProducts(query) {
-  if (itemInput.disabled) return;
   productResults.innerHTML = '';
   
-  const matches = currentFilteredProducts.filter(item => {
+  // Si hay rubro válido, busca en ese subgrupo. Si no, busca en TODA la base (dbItems)
+  const sourceList = isCategoryValid ? currentFilteredProducts : dbItems;
+  
+  // Filtro SIN LÍMITES
+  const matches = sourceList.filter(item => {
     const itemName = item.name || item; 
     return itemName.toLowerCase().includes(query);
-  }).slice(0, 30); // Límite visual para no saturar UI
+  });
 
   if (matches.length > 0) {
     matches.forEach(match => {
       const itemName = match.name || match;
+      const itemCat = match.category || "GENERAL";
+      
       const li = document.createElement('li');
       const regex = new RegExp(`(${query})`, "gi");
+      const highlightedName = query ? itemName.replace(regex, "<strong style='color: var(--blue);'>$1</strong>") : itemName;
       
-      li.innerHTML = query ? itemName.replace(regex, "<strong style='color: var(--blue);'>$1</strong>") : itemName;
+      // UX Contextual: Si es búsqueda global, mostramos el rubro abajo en gris para diferenciar repuestos similares
+      const catContext = !isCategoryValid ? `<span style="display:block; font-size:0.7rem; color:var(--text-muted); margin-top:2px;">📂 ${itemCat}</span>` : '';
+      li.innerHTML = `${highlightedName} ${catContext}`;
       
       li.addEventListener('click', () => {
+        // 1. Rellenar el repuesto
         itemInput.value = itemName;
         isItemValid = true;
         productResults.classList.add('hidden');
+        
+        // 2. MAGIA BIDIRECCIONAL: Si no había rubro, rellenarlo automáticamente hacia arriba
+        if (!isCategoryValid) {
+            categorySelect.value = itemCat;
+            isCategoryValid = true;
+            currentFilteredProducts = dbItems.filter(i => (i.category || "GENERAL") === itemCat);
+            
+            // Poka-Yoke visual: Parpadeo verde para confirmar que el sistema rellenó el dato
+            const originalBg = categorySelect.style.backgroundColor;
+            categorySelect.style.backgroundColor = "#e6fffa"; // Verde tenue
+            categorySelect.style.borderColor = "var(--green)";
+            setTimeout(() => {
+                categorySelect.style.backgroundColor = originalBg;
+                categorySelect.style.borderColor = "#e0e0e0";
+            }, 600);
+        }
       });
       productResults.appendChild(li);
     });
@@ -1472,29 +1638,29 @@ function renderProducts(query) {
   }
 }
 
-// --- CONTROL DE ERRORES (Cerrar menús y Validar Selección) ---
+// --- CONTROL DE ERRORES (Poka-Yoke de clicks fuera) ---
 document.addEventListener('click', function(e) {
   const isClickInsideCat = document.getElementById('category-search-container').contains(e.target);
   const isClickInsideProd = document.getElementById('function-search-container').contains(e.target);
 
   if (!isClickInsideCat) {
     categoryResults.classList.add('hidden');
-    // Si sale del campo sin elegir una opción válida, se borra (Poka-Yoke)
-    if (!isCategoryValid) {
+    // Si sale dejando un rubro inválido, lo borramos pero dejamos libre el input de Repuestos
+    if (!isCategoryValid && categorySelect.value !== '') {
       categorySelect.value = '';
-      itemInput.setAttribute('disabled', 'true');
-      itemInput.disabled = true;
-      itemInput.placeholder = "🔒 Bloqueado: Elige un rubro primero";
-      itemInput.value = '';
-      currentFilteredProducts = [];
+      currentFilteredProducts = dbItems; 
     }
   }
 
   if (!isClickInsideProd) {
     productResults.classList.add('hidden');
-    if (!isItemValid && !itemInput.disabled) itemInput.value = '';
+    // Si sale dejando un repuesto inválido, lo borramos
+    if (!isItemValid && itemInput.value !== '') {
+        itemInput.value = '';
+    }
   }
 });
+
     </script>
 </body>
 </html>

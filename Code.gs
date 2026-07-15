@@ -399,22 +399,54 @@ function getMechanicOrders(opId) {
   return results.reverse();
 }
 
-function submitBatchRequest(data) {
-  var sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
-  var ts = new Date();
-  var reqId = "REQ-" + Math.floor(Math.random() * 1000000);
-  const lock = LockService.getScriptLock();
+function submitBatchRequest(payload) {
   try {
-    lock.waitLock(5000);
-    data.items.forEach(function(i) {
-      sheet.appendRow([ts, reqId, "'" + data.opId, data.mechanicName, "'" + data.otNumber, data.unitId, i.item, Number(i.qty), "PENDIENTE", "", "", i.notes || "", "", ""]);
-      updateStockByName(i.item, -Number(i.qty));
-    });
-    return { success: true };
-  } catch(e) { return { success: false, error: e.message }; } 
-  finally { lock.releaseLock(); }
-}
+    const sheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
+    if (!sheet) throw new Error("No se pudo conectar a la pestaña de Transacciones.");
 
+    const timestamp = new Date();
+    // Generamos un ID único para todo el bloque del pedido (Ej: REQ-A1B2C3D4)
+    const reqId = "REQ-" + Utilities.getUuid().substring(0, 8).toUpperCase(); 
+    
+    // Armamos la matriz de datos a inyectar (Prägnanz: inserción en bloque)
+    const rowsToAppend = [];
+    
+    payload.items.forEach(item => {
+      // Creamos una fila vacía con 17 espacios (El índice 16 corresponde a la Columna Q)
+      const newRow = new Array(17).fill(""); 
+      
+      newRow[0]  = timestamp;             // Col A: Fecha / Hora
+      newRow[1]  = reqId;                 // Col B: ID de Pedido
+      newRow[2]  = payload.opId;          // Col C: ID Operario
+      newRow[3]  = payload.mechanicName;  // Col D: Nombre Operario
+      newRow[4]  = payload.otNumber;      // Col E: N° OT
+      newRow[5]  = payload.unitId;        // Col F: Patente / Unidad
+      newRow[6]  = item.item;             // Col G: Nombre del Repuesto
+      newRow[7]  = item.qty;              // Col H: Cantidad
+      newRow[8]  = "PENDIENTE";           // Col I: Estado inicial
+      
+      newRow[11] = item.notes || "";      // Col L: Notas (Índice 11)
+      
+      // === GOBERNANZA DE DATOS: DEVOLUCIÓN PREDET ===
+      // Col Q (Índice 16): Imprimimos "OK", "FALTA: motivo" o lo dejamos vacío
+      newRow[16] = item.canjeStatus || ""; 
+      
+      rowsToAppend.push(newRow);
+    });
+
+    // Inyectamos todas las filas juntas al final de la tabla
+    if (rowsToAppend.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAppend.length, 17).setValues(rowsToAppend);
+    }
+
+    // Retornamos éxito al Frontend para que limpie el carrito
+    return { success: true, reqId: reqId };
+    
+  } catch (err) {
+    console.error("Error en submitBatchRequest:", err);
+    return { success: false, error: err.toString() };
+  }
+}
 // === REEMPLAZAR EN Code.gs ===
 
 function findUnitOrOt(query, type) {
@@ -480,6 +512,12 @@ function getItemCatalog() {
   for (let i = 1; i < data.length; i++) { 
     const name = String(data[i][1]).trim();       // Columna B (Índice 1): Nombre del repuesto
     const category = String(data[i][3]).trim();   // Columna D (Índice 3): RUBRO
+    
+    // === DISEÑO DE SERVICIO: EXTRACCIÓN DE REGLA DE CANJE ===
+    // Columna H (Índice 7): Leemos si exige devolución obligatoria.
+    // Poka-Yoke: Soporta checkboxes nativos (booleanos) o texto manual ('TRUE')
+    const reqCanjeRaw = data[i][7];
+    const requiereCanje = reqCanjeRaw === true || String(reqCanjeRaw).toUpperCase() === 'TRUE';
 
     if (name) {
       // Poka-Yoke: Si el Excel no tiene rubro definido, lo agrupamos de forma segura
@@ -490,9 +528,12 @@ function getItemCatalog() {
 
       if (!uniqueCheck.has(uniqueKey)) {
         uniqueCheck.add(uniqueKey);
+        
+        // Inyectamos el objeto completo al catálogo de la App
         itemsList.push({
           category: safeCategory,
-          name: name
+          name: name,
+          requiereCanje: requiereCanje // <-- La App del Mecánico ahora sabe si debe frenarlo
         });
       }
     } 
@@ -715,23 +756,31 @@ function setUISignal(reqId, type, value) {
   return true;
 }
 
-// === ACTUALIZAR EN Code.gs ===
 function getPendingOrdersEnriched() {
   const transSheet = _getSheet(CONFIG.SHEETS.TRANSACTIONS);
   const otSheet = _getSheet(CONFIG.SHEETS.OT);
   const itemSheet = _getSheet(CONFIG.SHEETS.ITEMS); 
   
-  // Mapeo de Items (Nombre -> ID y Ubicación)
+  // 1. Mapeo de Items (Nombre -> ID, Ubicación y Condición de Canje)
   const itemData = itemSheet.getDataRange().getValues();
   const itemMap = {};
   for (let i = 1; i < itemData.length; i++) {
     const iId = String(itemData[i][0]).trim();
     const iName = String(itemData[i][1]).trim().toUpperCase();
     const iLoc = String(itemData[i][5]).trim();
-    if (iName) itemMap[iName] = { id: iId, loc: iLoc || 'S/D' };
+    // Columna H (Índice 7): Validación binaria robusta
+    const reqCanje = itemData[i][7] === true || String(itemData[i][7]).toUpperCase() === 'TRUE'; 
+
+    if (iName) {
+      itemMap[iName] = { 
+        id: iId, 
+        loc: iLoc || 'S/D', 
+        requiereCanje: reqCanje 
+      };
+    }
   }
 
-  // Mapeo OT
+  // 2. Mapeo OT
   const otData = otSheet.getDataRange().getValues();
   const otMap = {};
   for (let i = 1; i < otData.length; i++) {
@@ -739,11 +788,13 @@ function getPendingOrdersEnriched() {
     if (unitId) otMap[unitId] = { product: otData[i][CONFIG.OT_COLS.PRODUCT] || '', brand: otData[i][CONFIG.OT_COLS.BRAND] || '' };
   }
   
+  // 3. Mapeo de Transacciones y Ensamble de Datos
   const transData = transSheet.getDataRange().getValues();
   const ordersMap = {};
   
   for (let i = Math.max(1, transData.length - 200); i < transData.length; i++) {
     const row = transData[i], status = row[8], reqId = row[1];
+    
     if (status === "PENDIENTE" || status === "LISTO") {
       if (!ordersMap[reqId]) {
         const unitInfo = String(row[5] || '');
@@ -756,13 +807,26 @@ function getPendingOrdersEnriched() {
           items: [], notes: row[11], product: otInfo.product || '', brand: otInfo.brand || ''
         };
       }
+      
       const itemName = String(row[6]);
-      const itemDetails = itemMap[itemName.toUpperCase()] || { id: '---', loc: 'S/D' };
-      ordersMap[reqId].items.push({ name: itemName, qty: row[7], id: itemDetails.id, loc: itemDetails.loc });
+      // Fallback a false si el ítem no existe en la base de datos
+      const itemDetails = itemMap[itemName.toUpperCase()] || { id: '---', loc: 'S/D', requiereCanje: false };
+      
+      // Columna Q (Índice 16): Estado del canje ('OK', 'FALTA: Razón', o vacío)
+      const estadoCanje = String(row[16] || '').trim();
+
+      ordersMap[reqId].items.push({ 
+        name: itemName, 
+        qty: row[7], 
+        id: itemDetails.id, 
+        loc: itemDetails.loc,
+        requiereCanje: itemDetails.requiereCanje,
+        estadoCanje: estadoCanje
+      });
     }
   }
 
-  // LECTURA DE SEÑALES UI PARA EL DASHBOARD
+  // 4. LECTURA DE SEÑALES UI PARA EL DASHBOARD
   const props = PropertiesService.getScriptProperties().getProperties();
   const results = Object.values(ordersMap).map(order => {
     order.uiColor = props[`COLOR_${order.reqId}`] || 'default';
